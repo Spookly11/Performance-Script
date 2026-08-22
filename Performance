@@ -5,7 +5,7 @@ end
 
 sessionStartTime = os.clock()
 
--- Keep this table declared before any functions that close over it.
+
 enabled = {
     ping = true,
     fps = true,
@@ -31,7 +31,7 @@ IS_ALLOWED_GAME = (game.PlaceId == ALLOWED_PLACE_ID)
 COLORS = {
     background   = Color3.fromRGB(13, 17, 40),
     panel        = Color3.fromRGB(16, 21, 48),
-    accent       = Color3.fromRGB(130, 90, 255), 
+    accent       = Color3.fromRGB(130, 90, 255),
     unloadRed    = Color3.fromRGB(221, 28, 28),
     disabledGray = Color3.fromRGB(140, 140, 140),
     toggleOn     = Color3.fromRGB(70, 200, 130),
@@ -41,16 +41,16 @@ COLORS = {
 PANEL_TRANSPARENCY   = 0.08
 ELEMENT_TRANSPARENCY = 0.12
 M1_DEFAULT_COLOR = Color3.fromRGB(255, 60, 60)
-currentM1Color = M1_DEFAULT_COLOR -- overwritten below once saved prefs are loaded
--- Global VFX recolor system: instead of chasing specific move/asset names,
--- this watches for any ParticleEmitter/Trail/Beam/Light/Highlight (and
--- optionally Decal) anywhere under the character, workspace.Live, workspace.Thrown,
--- and ReplicatedStorage.Resources, and retints them toward TargetColor while
--- preserving brightness and leaving true grayscale (white/black/gray) alone.
+currentM1Color = M1_DEFAULT_COLOR
+
+
+
+
+
 VFXConfig = {
-    Enabled = false, -- driven by the "Suiryu m1 Color" toggle
+    Enabled = false,
     TargetColor = currentM1Color,
-    Mode = "Accent", -- "Accent" preserves grayscale, "Full" recolors everything
+    Mode = "Accent",
     PreserveGrayscale = true,
     GrayscaleSaturationThreshold = 0.15,
     RecolorParticles = true,
@@ -58,13 +58,13 @@ VFXConfig = {
     RecolorBeams = true,
     RecolorLights = true,
     RecolorHighlights = true,
-    RecolorDecals = false, -- decals are often actual artwork/textures, opt-in only
-    RecolorMeshes = true, -- solid BasePart/MeshPart color, only for models in VFX_MESH_ALLOWLIST
+    RecolorDecals = false,
+    RecolorMeshes = true,
 }
--- Some effects are made up mostly/entirely of Decals (ring flashes, etc). Rather
--- than flipping RecolorDecals on globally (which would also recolor things like
--- your character's face decal), name specific effect containers here to opt
--- their descendant Decals into recoloring even while the global default stays off.
+
+
+
+
 VFX_DECAL_ALLOWLIST = {
     KickShockwave = true,
     ["Right Arm"] = true,
@@ -147,28 +147,28 @@ LIMITED_EMOTE_NAMES = {
     ["Speedster"]          = true,
 }
 unloaded = false
-antiAfkConnection = nil      -- holds the fallback thread (task.spawn handle); NOT an RBXScriptConnection
+antiAfkConnection = nil
 antiAfkIdleConnection = nil
 antiAfkVirtualUser = nil
 antiAfkLastAction = 0
-antiAfkRunning = false       -- explicit cancellation flag for the fallback loop
+antiAfkRunning = false
 
--- More reliable Anti-AFK:
--- 1) Listen for Roblox's client-side Player.Idled event.
--- 2) Use VirtualUser to generate a harmless right-click style input when idle.
--- 3) Also send the same input periodically as a fallback, so the feature
---    doesn't depend entirely on the Idled event firing.
--- Roblox documents Player.Idled as a client-only event that begins firing
--- after roughly two minutes of inactivity. VirtualUser is an older API,
--- but this is still the appropriate lightweight input-simulation approach.
+
+
+
+
+
+
+
+
 function antiAFKPulse()
     if not enabled.antiafk or unloaded then return end
 
-    -- CaptureController + a brief Button2 press is the standard lightweight
-    -- anti-AFK input. We only update the "last action" timestamp when the
-    -- input actually succeeds, so the fallback loop isn't fooled by errors.
+
+
+
     local camera = workspace.CurrentCamera
-    if not camera then return end  -- no camera = can't form a valid CFrame; skip
+    if not camera then return end
 
     local ok = pcall(function()
         if not antiAfkVirtualUser then
@@ -189,7 +189,7 @@ function antiAFKPulse()
 end
 
 function startAntiAFK()
-    -- Cancel any previously running fallback loop before starting a new one.
+
     antiAfkRunning = false
 
     if antiAfkIdleConnection then
@@ -200,21 +200,21 @@ function startAntiAFK()
     antiAfkLastAction = os.clock()
     antiAfkVirtualUser = game:GetService("VirtualUser")
 
-    -- Primary mechanism: react when Roblox classifies the client as idle.
+
     antiAfkIdleConnection = LocalPlayer.Idled:Connect(function()
         if not enabled.antiafk or unloaded then return end
         antiAFKPulse()
     end)
 
-    -- Fallback: check once per minute. Uses antiAfkRunning (not enabled.antiafk)
-    -- as the loop condition so stopAntiAFK can kill it instantly even if the
-    -- toggle flag hasn't been cleared yet (e.g. during cleanupScript).
+
+
+
     antiAfkRunning = true
     antiAfkConnection = task.spawn(function()
         while antiAfkRunning and not unloaded do
             task.wait(60)
             if antiAfkRunning and not unloaded then
-                -- Don't fire if the user (or the Idled handler) acted recently.
+
                 if os.clock() - antiAfkLastAction >= 55 then
                     antiAFKPulse()
                 end
@@ -224,9 +224,9 @@ function startAntiAFK()
 end
 
 function stopAntiAFK()
-    -- Kill the fallback loop. Setting antiAfkRunning = false is the only
-    -- reliable way to stop it; the thread handle in antiAfkConnection cannot
-    -- be Disconnect()ed (it's not an RBXScriptConnection).
+
+
+
     antiAfkRunning = false
     antiAfkConnection = nil
 
@@ -252,7 +252,7 @@ lbLocked = not IS_ALLOWED_GAME
 sessionKillsLocked = not IS_ALLOWED_GAME
 emoteLocked = not IS_ALLOWED_GAME
 m1ColorLocked = not IS_ALLOWED_GAME
-dragLocked = false 
+dragLocked = false
 currentFPS = 60
 fpsFrameCount = 0
 fpsAccumTime = 0
@@ -421,30 +421,30 @@ function transformColorSequence(sequence)
     return ColorSequence.new(newKeypoints)
 end
 
--- Returns true if `obj` is a descendant of the local player's character,
--- OR a descendant of workspace.Live / workspace.Thrown but NOT parented
--- under any other player's character model.
--- This ensures the VFX color toggle only affects effects the local player
--- produced, not effects belonging to other players.
+
+
+
+
+
 function isOwnedByLocalPlayer(obj)
     local ancestor = obj
     while ancestor do
-        -- Directly inside the local character → always ours.
+
         if ancestor == LocalPlayer.Character then
             return true
         end
-        -- Inside a workspace VFX folder: reject if we find another
-        -- player's character somewhere in the ancestry first.
+
+
         local parent = ancestor.Parent
         if parent == workspace then
-            -- We've reached the top-level workspace child (e.g. "Live").
-            -- The object is not under any character, so treat it as ours
-            -- (projectiles/thrown effects created by the local player have
-            -- no reliable owner tag, but effects under other characters
-            -- would have been caught in the character check above).
+
+
+
+
+
             return true
         end
-        -- If the parent is another player's character, it's not ours.
+
         if parent then
             for _, player in ipairs(Players:GetPlayers()) do
                 if player ~= LocalPlayer and player.Character == parent then
@@ -462,7 +462,7 @@ function recolorObject(obj)
         return false
     end
 
-    -- Skip effects that belong to other players.
+
     if not isOwnedByLocalPlayer(obj) then
         return false
     end
@@ -676,7 +676,7 @@ LocalPlayer.CharacterAdded:Connect(function()
     startVFXWatcher()
 end)
 
-cachedEmotesTable = nil 
+cachedEmotesTable = nil
 function getAllEmotesTable()
     if cachedEmotesTable then return cachedEmotesTable end
     local ok, result = pcall(function()
@@ -865,9 +865,9 @@ fpsValue     = createStatCell(20 + (STAT_CELL_WIDTH + STAT_CELL_GAP),           
 monthlyValue = createStatCell(20 + (STAT_CELL_WIDTH + STAT_CELL_GAP) * 2,         105, "MONTHLY")
 totalValue   = createStatCell(20 + (STAT_CELL_WIDTH + STAT_CELL_GAP) * 3,         105, "TOTAL")
 
--- FIX: Three buttons separated across the right side of the topbar.
--- Lock (leftmost), Stats (middle), Gear (rightmost) — spaced 42px apart.
--- Lock button: x=534, Stats button: x=576, Gear button: x=618
+
+
+
 
 lockButton = Instance.new("TextButton")
 lockButton.Name = "LockButton"
@@ -876,8 +876,8 @@ lockButton.Position = UDim2.new(0, 534, 0, 8)
 lockButton.Size = UDim2.new(0, 32, 0, 32)
 lockButton.Text = ""
 lockButton.Parent = topBar
-lockColorOn = Color3.fromRGB(60, 140, 255)  
-lockColorOff = COLORS.toggleOff             
+lockColorOn = Color3.fromRGB(60, 140, 255)
+lockColorOff = COLORS.toggleOff
 lockRing = Instance.new("Frame")
 lockRing.Name = "Ring"
 lockRing.AnchorPoint = Vector2.new(0.5, 1)
@@ -944,13 +944,13 @@ lockButton.MouseButton1Click:Connect(function()
     persistPosition(topBar.Position)
 end)
 
--- FIX: Stats button moved to x=576 (was x=568, colliding with lock button).
+
 gearButton = Instance.new("ImageButton")
 gearButton.Name = "GearButton"
 gearButton.BackgroundTransparency = 1
 gearButton.Position = UDim2.new(0, 618, 0, 12)
 gearButton.Size = UDim2.new(0, 32, 0, 32)
-gearButton.Image = "rbxassetid://6031280882" 
+gearButton.Image = "rbxassetid://6031280882"
 gearButton.ImageColor3 = Color3.fromRGB(60, 140, 255)
 gearButton.Parent = topBar
 statsButton = Instance.new("ImageButton")
@@ -1001,14 +1001,14 @@ tooltipCorner.Parent = tooltip
 gearButton.MouseEnter:Connect(function() tooltip.Visible = true end)
 gearButton.MouseLeave:Connect(function() tooltip.Visible = false end)
 local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 434
--- FIX: Stats panel has fewer rows so it has its own height constant.
+
 local STATS_HEIGHT = SETTINGS_HEIGHT
 SETTINGS_GAP = 8
 
--- FIX: Both panels centered under the topbar.
--- Topbar = 660px. Settings(300) + gap(8) + Stats(300) = 608px.
--- Center offset = (660 - 608) / 2 = 26px from the topbar's left edge.
-local PANEL_CENTER_OFFSET = 26  -- settings panel starts 26px in from topbar left
+
+
+
+local PANEL_CENTER_OFFSET = 26
 
 settingsMenu = Instance.new("Frame")
 settingsMenu.Name = "SettingsMenu"
@@ -1056,10 +1056,10 @@ settingsDividerCorner = Instance.new("UICorner")
 settingsDividerCorner.CornerRadius = UDim.new(1, 0)
 settingsDividerCorner.Parent = settingsDivider
 
--- FIX: Stats panel centered alongside the settings panel.
--- Stats panel starts at topbar.X + 26 + 300 + 8 = topbar.X + 334
+
+
 local STATS_WIDTH = 300
-local STATS_PANEL_OFFSET = PANEL_CENTER_OFFSET + SETTINGS_WIDTH + SETTINGS_GAP  -- 334
+local STATS_PANEL_OFFSET = PANEL_CENTER_OFFSET + SETTINGS_WIDTH + SETTINGS_GAP
 
 statsMenu = Instance.new("Frame")
 statsMenu.Name = "StatsMenu"
@@ -1083,7 +1083,7 @@ statsMenuCorner = Instance.new("UICorner")
 statsMenuCorner.CornerRadius = UDim.new(0, 20)
 statsMenuCorner.Parent = statsMenu
 
--- FIX: "STATISTICS" header stays above the divider; stopwatch/username move below it.
+
 statsHeaderLabel = Instance.new("TextLabel")
 statsHeaderLabel.Name = "StatsHeader"
 statsHeaderLabel.BackgroundTransparency = 1
@@ -1110,7 +1110,7 @@ dividerCorner = Instance.new("UICorner")
 dividerCorner.CornerRadius = UDim.new(1, 0)
 dividerCorner.Parent = divider
 
--- FIX: Stopwatch and username now placed BELOW the divider (y=54), not overlapping "STATISTICS".
+
 stopwatchLabel = Instance.new("TextLabel")
 stopwatchLabel.Name = "SessionStopwatch"
 stopwatchLabel.BackgroundTransparency = 1
@@ -1150,7 +1150,7 @@ versionLabel.TextXAlignment = Enum.TextXAlignment.Right
 versionLabel.ZIndex = 11
 versionLabel.Parent = statsMenu
 
--- Stats content rows moved downward to make room for the version text.
+
 sessionKillsLabel = Instance.new("TextLabel")
 sessionKillsLabel.Name = "SessionKills"
 sessionKillsLabel.BackgroundTransparency = 1
@@ -1212,7 +1212,7 @@ nextEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
 nextEmoteLabel.ZIndex = 11
 nextEmoteLabel.Parent = statsMenu
 
--- FIX: "Emotes: X/Y" label narrowed so the disclaimer fits right next to it on the same row.
+
 emotesOwnedLabel = Instance.new("TextLabel")
 emotesOwnedLabel.Name = "EmotesOwned"
 emotesOwnedLabel.BackgroundTransparency = 1
@@ -1226,7 +1226,7 @@ emotesOwnedLabel.TextXAlignment = Enum.TextXAlignment.Left
 emotesOwnedLabel.ZIndex = 11
 emotesOwnedLabel.Parent = statsMenu
 
--- FIX: Disclaimer sits right beside the emote counter (x=154, same y + slight vertical nudge).
+
 emotesDisclaimerLabel = Instance.new("TextLabel")
 emotesDisclaimerLabel.Name = "EmotesDisclaimer"
 emotesDisclaimerLabel.BackgroundTransparency = 1
@@ -1332,18 +1332,18 @@ emotesToggle = createToggleRow("Emotes", 234, "Emotes", "emotes", emoteLocked, f
 antiAfkToggle = createToggleRow("AntiAFK", 264, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
 m1ColorToggle = createToggleRow("M1Color", 294, "Custom VFX Color", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
 
--- FIX: VFX color row layout redesigned for consistent spacing.
--- Toggle occupies x=236 to x=280 (UDim2(1,-64) to UDim2(1,-20) within 300px panel).
--- Reading right-to-left with 6px gaps between each element:
---   Expand ">" : x=208, w=22  (6px gap before toggle at x=236)
---   HexBox     : x=76,  w=126 (6px gap, ends at x=202)
---   Apply "✓"  : x=48,  w=22  (6px gap, ends at x=70)
---   Favorite"★": x=20,  w=22  (starts at margin x=20)
--- All action controls start hidden; they appear only when the expand button is clicked.
+
+
+
+
+
+
+
+
 
 m1SwatchExpanded = false
 
--- FIX: Expand button moved left to x=208 so it doesn't overlap the toggle at x=236.
+
 m1ExpandButton = Instance.new("TextButton")
 m1ExpandButton.Name = "M1ColorExpandButton"
 m1ExpandButton.Position = UDim2.new(0, 208, 0, 294)
@@ -1361,8 +1361,8 @@ m1ExpandButtonCorner = Instance.new("UICorner")
 m1ExpandButtonCorner.CornerRadius = UDim.new(0, 6)
 m1ExpandButtonCorner.Parent = m1ExpandButton
 
--- FIX: HexBox repositioned to x=76 with AnchorPoint(0,0) for simpler layout.
--- Width=126 so it fills x=76 to x=202 with 6px gaps on either side.
+
+
 m1HexBox = Instance.new("TextBox")
 m1HexBox.Name = "M1ColorHexBox"
 m1HexBox.AnchorPoint = Vector2.new(0, 0)
@@ -1463,8 +1463,8 @@ end
 
 m1ColorActionButtons = {}
 
--- FIX: Favorite button at x=20 (leftmost), Apply button at x=48 (6px gap after favorite).
--- Equal 6px gaps between all elements: ★(20) → 6px → ✓(48) → 6px → HexBox(76) → 6px → >(208)
+
+
 m1FavoriteButton = Instance.new("TextButton")
 m1FavoriteButton.Name = "M1ColorFavoriteButton"
 m1FavoriteButton.Position = UDim2.new(0, 20, 0, 294)
@@ -1639,7 +1639,7 @@ function openM1FavoritesDropdown()
     m1FavoritesDropdownOpen = true
 end
 
--- FIX: Helper to collapse the VFX color expander — called when settings menu closes.
+
 function collapseM1Expander()
     if m1SwatchExpanded then
         m1SwatchExpanded = false
@@ -1758,8 +1758,8 @@ function setSettingsOpen(open)
         })
         menuSizeTween:Play()
     else
-        -- FIX: Collapse the VFX expander when the settings menu closes so it
-        -- doesn't remain open and overlap content next time the menu is opened.
+
+
         collapseM1Expander()
         menuSizeTween = TweenService:Create(settingsMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
             Size = UDim2.new(0, SETTINGS_WIDTH, 0, 0)
@@ -1778,7 +1778,7 @@ function setStatsOpen(open)
     if open then
         syncStatsMenuPosition()
         statsMenu.Visible = true
-        -- Stats panel uses the same height as the settings panel.
+
         statsSizeTween = TweenService:Create(statsMenu, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
             Size = UDim2.new(0, STATS_WIDTH, 0, STATS_HEIGHT)
         })
@@ -1930,7 +1930,7 @@ playerCountConnections = {
     Players.PlayerAdded:Connect(updatePlayerCountDisplay),
     Players.PlayerRemoving:Connect(updatePlayerCountDisplay),
 }
-knownOwnedEmoteIds = {} 
+knownOwnedEmoteIds = {}
 function snapshotOwnedEmotes()
     knownOwnedEmoteIds = {}
     for _, id in ipairs(getOwnedEmoteIds()) do
@@ -1986,7 +1986,7 @@ function checkForNewEmote()
 end
 emoteConnections = {}
 if not emoteLocked then
-    snapshotOwnedEmotes() 
+    snapshotOwnedEmotes()
     table.insert(emoteConnections, LocalPlayer:GetAttributeChangedSignal("Emotes"):Connect(checkForNewEmote))
     table.insert(emoteConnections, LocalPlayer:GetAttributeChangedSignal("TotalKillsFrb"):Connect(updateEmoteDisplay))
     table.insert(emoteConnections, LocalPlayer:GetAttributeChangedSignal("LastEmoteSpin"):Connect(updateEmoteDisplay))
