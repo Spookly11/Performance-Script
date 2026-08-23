@@ -426,33 +426,46 @@ end
 
 
 
+-- Build a fast lookup set for shared VFX folder names
+local VFX_WATCH_ROOT_SET = {}
+for _, name in ipairs(VFX_WATCH_ROOT_NAMES) do
+    VFX_WATCH_ROOT_SET[name] = true
+end
+
 function isOwnedByLocalPlayer(obj)
     local ancestor = obj
     while ancestor do
 
+        -- Direct character match: definitely ours
         if ancestor == LocalPlayer.Character then
             return true
         end
 
-
-        local parent = ancestor.Parent
-        if parent == workspace then
-
-
-
-
-
-            return true
-        end
-
-        if parent then
-            for _, player in ipairs(Players:GetPlayers()) do
-                if player ~= LocalPlayer and player.Character == parent then
-                    return false
-                end
+        -- If this ancestor IS another player's character, reject immediately
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer and player.Character and ancestor == player.Character then
+                return false
             end
         end
-        ancestor = parent
+
+        -- Reached a direct child of workspace
+        if ancestor.Parent == workspace then
+            if VFX_WATCH_ROOT_SET[ancestor.Name] then
+                -- This is a shared VFX folder (Live, Thrown, etc.)
+                -- No other player's character was found on the way up, so allow it
+                return true
+            end
+
+            -- Otherwise it must be our own character to be allowed
+            local char = LocalPlayer.Character
+            if char then
+                return ancestor == char
+            end
+            -- No character loaded yet -- reject to be safe
+            return false
+        end
+
+        ancestor = ancestor.Parent
     end
     return false
 end
@@ -1143,7 +1156,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.09"
+versionLabel.Text = "Version 3.10"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 12
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
