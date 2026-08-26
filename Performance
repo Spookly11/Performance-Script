@@ -1013,7 +1013,7 @@ tooltipCorner.CornerRadius = UDim.new(0, 6)
 tooltipCorner.Parent = tooltip
 gearButton.MouseEnter:Connect(function() tooltip.Visible = true end)
 gearButton.MouseLeave:Connect(function() tooltip.Visible = false end)
-local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 434
+local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 555
 
 local STATS_HEIGHT = SETTINGS_HEIGHT
 SETTINGS_GAP = 8
@@ -1023,11 +1023,17 @@ SETTINGS_GAP = 8
 
 local PANEL_CENTER_OFFSET = 26
 
+-- Panels slide in from left edge of screen; Y is fixed near top
+local PANEL_Y_OFFSET = 80
+-- Off-screen X (hidden): panels start fully off-screen to the left
+local PANEL_HIDDEN_X = -SETTINGS_WIDTH - 10
+local PANEL_VISIBLE_X = 0
+
 settingsMenu = Instance.new("Frame")
 settingsMenu.Name = "SettingsMenu"
 settingsMenu.AnchorPoint = Vector2.new(0, 0)
-settingsMenu.Position = UDim2.new(0, 0, 0, 0)
-settingsMenu.Size = UDim2.new(0, SETTINGS_WIDTH, 0, 0)
+settingsMenu.Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
+settingsMenu.Size = UDim2.new(0, SETTINGS_WIDTH, 0, SETTINGS_HEIGHT)
 settingsMenu.BackgroundColor3 = COLORS.panel
 settingsMenu.BackgroundTransparency = PANEL_TRANSPARENCY
 settingsMenu.ClipsDescendants = true
@@ -1035,15 +1041,9 @@ settingsMenu.Visible = false
 settingsMenu.ZIndex = 10
 settingsMenu.Parent = screenGui
 function syncSettingsMenuPosition()
-    settingsMenu.Position = UDim2.new(
-        0, topBar.Position.X.Offset + PANEL_CENTER_OFFSET,
-        0, topBar.Position.Y.Offset + TOPBAR_HEIGHT + SETTINGS_GAP
-    )
+    -- No-op: panels are now fixed to left edge, not tied to topBar
 end
 syncSettingsMenuPosition()
-settingsMenuCorner = Instance.new("UICorner")
-settingsMenuCorner.CornerRadius = UDim.new(0, 20)
-settingsMenuCorner.Parent = settingsMenu
 settingsHeaderLabel = Instance.new("TextLabel")
 settingsHeaderLabel.Name = "SettingsHeader"
 settingsHeaderLabel.BackgroundTransparency = 1
@@ -1052,7 +1052,7 @@ settingsHeaderLabel.Size = UDim2.new(1, -40, 0, 20)
 settingsHeaderLabel.Font = Enum.Font.GothamBold
 settingsHeaderLabel.Text = "SETTINGS"
 settingsHeaderLabel.TextColor3 = Color3.fromRGB(60, 140, 255)
-settingsHeaderLabel.TextSize = 13
+settingsHeaderLabel.TextSize = 15
 settingsHeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
 settingsHeaderLabel.ZIndex = 11
 settingsHeaderLabel.Parent = settingsMenu
@@ -1072,13 +1072,12 @@ settingsDividerCorner.Parent = settingsDivider
 
 
 local STATS_WIDTH = 300
-local STATS_PANEL_OFFSET = PANEL_CENTER_OFFSET + SETTINGS_WIDTH + SETTINGS_GAP
 
 statsMenu = Instance.new("Frame")
 statsMenu.Name = "StatsMenu"
 statsMenu.AnchorPoint = Vector2.new(0, 0)
-statsMenu.Position = UDim2.new(0, 0, 0, 0)
-statsMenu.Size = UDim2.new(0, STATS_WIDTH, 0, 0)
+statsMenu.Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
+statsMenu.Size = UDim2.new(0, STATS_WIDTH, 0, STATS_HEIGHT)
 statsMenu.BackgroundColor3 = COLORS.panel
 statsMenu.BackgroundTransparency = PANEL_TRANSPARENCY
 statsMenu.ClipsDescendants = true
@@ -1086,15 +1085,9 @@ statsMenu.Visible = false
 statsMenu.ZIndex = 10
 statsMenu.Parent = screenGui
 function syncStatsMenuPosition()
-    statsMenu.Position = UDim2.new(
-        0, topBar.Position.X.Offset + STATS_PANEL_OFFSET,
-        0, topBar.Position.Y.Offset + TOPBAR_HEIGHT + SETTINGS_GAP
-    )
+    -- No-op: panels are now fixed to left edge, not tied to topBar
 end
 syncStatsMenuPosition()
-statsMenuCorner = Instance.new("UICorner")
-statsMenuCorner.CornerRadius = UDim.new(0, 20)
-statsMenuCorner.Parent = statsMenu
 
 
 statsHeaderLabel = Instance.new("TextLabel")
@@ -1105,7 +1098,7 @@ statsHeaderLabel.Size = UDim2.new(1, -40, 0, 20)
 statsHeaderLabel.Font = Enum.Font.GothamBold
 statsHeaderLabel.Text = "STATISTICS"
 statsHeaderLabel.TextColor3 = Color3.fromRGB(60, 200, 130)
-statsHeaderLabel.TextSize = 13
+statsHeaderLabel.TextSize = 15
 statsHeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
 statsHeaderLabel.ZIndex = 11
 statsHeaderLabel.Parent = statsMenu
@@ -1132,7 +1125,7 @@ stopwatchLabel.Size = UDim2.new(1, -40, 0, 22)
 stopwatchLabel.Font = Enum.Font.Gotham
 stopwatchLabel.Text = "Session Time: 0:00:00:00"
 stopwatchLabel.TextColor3 = COLORS.white
-stopwatchLabel.TextSize = 14
+stopwatchLabel.TextSize = 16
 stopwatchLabel.TextXAlignment = Enum.TextXAlignment.Left
 stopwatchLabel.ZIndex = 11
 stopwatchLabel.Parent = statsMenu
@@ -1144,7 +1137,7 @@ usernameLabel.Size = UDim2.new(1, -40, 0, 22)
 usernameLabel.Font = Enum.Font.GothamBold
 usernameLabel.Text = getUsername()
 usernameLabel.TextColor3 = COLORS.white
-usernameLabel.TextSize = 14
+usernameLabel.TextSize = 16
 usernameLabel.TextXAlignment = Enum.TextXAlignment.Right
 usernameLabel.TextTruncate = Enum.TextTruncate.AtEnd
 usernameLabel.ZIndex = 11
@@ -1156,9 +1149,9 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.10"
+versionLabel.Text = "Version 3.14"
 versionLabel.TextColor3 = COLORS.disabledGray
-versionLabel.TextSize = 12
+versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
 versionLabel.ZIndex = 11
 versionLabel.Parent = statsMenu
@@ -1172,7 +1165,7 @@ sessionKillsLabel.Size = UDim2.new(1, -40, 0, 24)
 sessionKillsLabel.Font = Enum.Font.Gotham
 sessionKillsLabel.Text = "Session Kills: --"
 sessionKillsLabel.TextColor3 = COLORS.white
-sessionKillsLabel.TextSize = 15
+sessionKillsLabel.TextSize = 16
 sessionKillsLabel.TextXAlignment = Enum.TextXAlignment.Left
 sessionKillsLabel.ZIndex = 11
 sessionKillsLabel.Parent = statsMenu
@@ -1184,7 +1177,7 @@ khrLabel.Size = UDim2.new(1, -40, 0, 24)
 khrLabel.Font = Enum.Font.Gotham
 khrLabel.Text = "K/HR: --"
 khrLabel.TextColor3 = COLORS.white
-khrLabel.TextSize = 15
+khrLabel.TextSize = 16
 khrLabel.TextXAlignment = Enum.TextXAlignment.Left
 khrLabel.ZIndex = 11
 khrLabel.Parent = statsMenu
@@ -1196,7 +1189,7 @@ executionLabel.Size = UDim2.new(1, -40, 0, 24)
 executionLabel.Font = Enum.Font.Gotham
 executionLabel.Text = "Times Executed: " .. formatNumberWithCommas(executionCount)
 executionLabel.TextColor3 = COLORS.white
-executionLabel.TextSize = 15
+executionLabel.TextSize = 16
 executionLabel.TextXAlignment = Enum.TextXAlignment.Left
 executionLabel.ZIndex = 11
 executionLabel.Parent = statsMenu
@@ -1208,7 +1201,7 @@ playerCountLabel.Size = UDim2.new(1, -40, 0, 24)
 playerCountLabel.Font = Enum.Font.Gotham
 playerCountLabel.Text = "Players: --"
 playerCountLabel.TextColor3 = COLORS.white
-playerCountLabel.TextSize = 15
+playerCountLabel.TextSize = 16
 playerCountLabel.TextXAlignment = Enum.TextXAlignment.Left
 playerCountLabel.ZIndex = 11
 playerCountLabel.Parent = statsMenu
@@ -1220,7 +1213,7 @@ nextEmoteLabel.Size = UDim2.new(1, -40, 0, 24)
 nextEmoteLabel.Font = Enum.Font.Gotham
 nextEmoteLabel.Text = "Next Emote: --"
 nextEmoteLabel.TextColor3 = COLORS.white
-nextEmoteLabel.TextSize = 15
+nextEmoteLabel.TextSize = 16
 nextEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
 nextEmoteLabel.ZIndex = 11
 nextEmoteLabel.Parent = statsMenu
@@ -1234,7 +1227,7 @@ emotesOwnedLabel.Size = UDim2.new(0, 130, 0, 24)
 emotesOwnedLabel.Font = Enum.Font.Gotham
 emotesOwnedLabel.Text = "Emotes: --/--"
 emotesOwnedLabel.TextColor3 = COLORS.white
-emotesOwnedLabel.TextSize = 15
+emotesOwnedLabel.TextSize = 16
 emotesOwnedLabel.TextXAlignment = Enum.TextXAlignment.Left
 emotesOwnedLabel.ZIndex = 11
 emotesOwnedLabel.Parent = statsMenu
@@ -1243,8 +1236,8 @@ emotesOwnedLabel.Parent = statsMenu
 emotesDisclaimerLabel = Instance.new("TextLabel")
 emotesDisclaimerLabel.Name = "EmotesDisclaimer"
 emotesDisclaimerLabel.BackgroundTransparency = 1
-emotesDisclaimerLabel.Position = UDim2.new(0, 128, 0, 238)
-emotesDisclaimerLabel.Size = UDim2.new(1, -148, 0, 16)
+emotesDisclaimerLabel.Position = UDim2.new(0, 140, 0, 238)
+emotesDisclaimerLabel.Size = UDim2.new(1, -178, 0, 16)
 emotesDisclaimerLabel.Font = Enum.Font.Gotham
 emotesDisclaimerLabel.Text = "(Excludes Limiteds)"
 emotesDisclaimerLabel.TextColor3 = COLORS.disabledGray
@@ -1262,7 +1255,7 @@ lastEmoteLabel.Size = UDim2.new(1, -40, 0, 40)
 lastEmoteLabel.Font = Enum.Font.Gotham
 lastEmoteLabel.Text = "Last Emote: --"
 lastEmoteLabel.TextColor3 = COLORS.white
-lastEmoteLabel.TextSize = 15
+lastEmoteLabel.TextSize = 16
 lastEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
 lastEmoteLabel.TextYAlignment = Enum.TextYAlignment.Top
 lastEmoteLabel.TextWrapped = true
@@ -1278,7 +1271,7 @@ function createToggleRow(name, yPos, labelText, stateKey, locked, onToggle)
     label.Font = Enum.Font.Gotham
     label.Text = labelText
     label.TextColor3 = COLORS.white
-    label.TextSize = 14
+    label.TextSize = 15
     label.TextXAlignment = Enum.TextXAlignment.Left
     label.ZIndex = 11
     label.Parent = settingsMenu
@@ -1405,7 +1398,7 @@ m1HexBoxStroke.Parent = m1HexBox
 m1FavoriteColors = {}
 if type(savedPrefs.m1FavoriteColors) == "table" then
     for _, hex in ipairs(savedPrefs.m1FavoriteColors) do
-        if type(hex) == "string" and hexToColor3(hex) and #m1FavoriteColors < 6 then
+        if type(hex) == "string" and hexToColor3(hex) and #m1FavoriteColors < 7 then
             table.insert(m1FavoriteColors, string.upper(hex))
         end
     end
@@ -1431,7 +1424,7 @@ end
 
 function addM1Favorite(hex)
     hex = string.upper(hex)
-    if isM1Favorite(hex) or #m1FavoriteColors >= 6 then
+    if isM1Favorite(hex) or #m1FavoriteColors >= 7 then
         return false
     end
     table.insert(m1FavoriteColors, hex)
@@ -1556,7 +1549,7 @@ end
 
 m1FavoritesDropdown = Instance.new("Frame")
 m1FavoritesDropdown.Name = "M1FavoritesDropdown"
-m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 320)
+m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 322)
 m1FavoritesDropdown.Size = UDim2.new(0, 176, 0, 0)
 m1FavoritesDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoritesDropdown.BackgroundTransparency = 0.08
@@ -1634,7 +1627,7 @@ function refreshM1FavoritesDropdown()
 
     m1FavoritesDropdown.Size = UDim2.new(
         0,
-        math.max(40, math.min(#m1FavoriteColors, 6) * (swatchWidth + swatchGap) + 4),
+        math.max(40, math.min(#m1FavoriteColors, 7) * (swatchWidth + swatchGap) + 4),
         0,
         rowHeight + 4
     )
@@ -1676,7 +1669,7 @@ m1FavoriteButton.MouseButton1Click:Connect(function()
         else
             openM1FavoritesDropdown()
         end
-    elseif #m1FavoriteColors < 6 then
+    elseif #m1FavoriteColors < 7 then
         local added = addM1Favorite(appliedHex)
         if added then
             m1FavoriteButton.Text = "★"
@@ -1728,12 +1721,12 @@ applyAntiAFK(enabled.antiafk)
 favoriteHintLabel = Instance.new("TextLabel")
 favoriteHintLabel.Name = "FavoriteHint"
 favoriteHintLabel.BackgroundTransparency = 1
-favoriteHintLabel.Position = UDim2.new(0, 20, 0, 370)
-favoriteHintLabel.Size = UDim2.new(1, -40, 0, 16)
+favoriteHintLabel.Position = UDim2.new(0, 20, 0, 474)
+favoriteHintLabel.Size = UDim2.new(1, -40, 0, 32)
 favoriteHintLabel.Font = Enum.Font.Gotham
-favoriteHintLabel.Text = "Double-Click To Remove Favorites. Maximum Of Six."
+favoriteHintLabel.Text = "Double-Click A Favorite Color To Remove It. Maximum Of Seven."
 favoriteHintLabel.TextColor3 = COLORS.disabledGray
-favoriteHintLabel.TextSize = 11
+favoriteHintLabel.TextSize = 12
 favoriteHintLabel.TextWrapped = true
 favoriteHintLabel.TextXAlignment = Enum.TextXAlignment.Left
 favoriteHintLabel.Visible = IS_ALLOWED_GAME
@@ -1742,14 +1735,14 @@ favoriteHintLabel.Parent = settingsMenu
 
 unloadButton = Instance.new("TextButton")
 unloadButton.Name = "UnloadButton"
-unloadButton.Position = UDim2.new(0, 20, 0, 390)
-unloadButton.Size = UDim2.new(1, -40, 0, 34)
+unloadButton.Position = UDim2.new(0, 20, 0, 508)
+unloadButton.Size = UDim2.new(1, -40, 0, 36)
 unloadButton.BackgroundColor3 = COLORS.unloadRed
 unloadButton.BackgroundTransparency = ELEMENT_TRANSPARENCY
 unloadButton.Font = Enum.Font.GothamBold
 unloadButton.Text = "UNLOAD SCRIPT"
 unloadButton.TextColor3 = Color3.fromRGB(20, 0, 0)
-unloadButton.TextSize = 16
+unloadButton.TextSize = 17
 unloadButton.ZIndex = 11
 unloadButton.Parent = settingsMenu
 unloadCorner = Instance.new("UICorner")
@@ -1757,62 +1750,149 @@ unloadCorner.CornerRadius = UDim.new(0, 10)
 unloadCorner.Parent = unloadButton
 settingsOpen = false
 statsOpen = false
-local menuSizeTween
-local statsSizeTween
-function setSettingsOpen(open)
-    settingsOpen = open
-    if menuSizeTween then menuSizeTween:Cancel() end
-    if open then
-        syncSettingsMenuPosition()
-        syncStatsMenuPosition()
-        settingsMenu.Visible = true
-        menuSizeTween = TweenService:Create(settingsMenu, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, SETTINGS_WIDTH, 0, SETTINGS_HEIGHT)
-        })
-        menuSizeTween:Play()
-    else
 
+-- Panel state: nil = both closed, "settings" = settings visible, "stats" = stats visible
+local activePanel = nil
+local panelTransitionId = 0
+
+local settingsTweenHolder = {}
+local statsTweenHolder = {}
+
+local function cancelPanelTween(tweenRef)
+    if tweenRef[1] then
+        pcall(function() tweenRef[1]:Cancel() end)
+        tweenRef[1] = nil
+    end
+end
+
+local function forceHidePanel(panel, tweenRef)
+    cancelPanelTween(tweenRef)
+    panel.Visible = false
+    panel.Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
+end
+
+local function slideIn(panel, tweenRef)
+    cancelPanelTween(tweenRef)
+    panel.Visible = true
+    panel.Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
+
+    local t = TweenService:Create(panel, TweenInfo.new(0.28, Enum.EasingStyle.Quint, Enum.EasingDirection.Out), {
+        Position = UDim2.new(0, PANEL_VISIBLE_X, 0, PANEL_Y_OFFSET)
+    })
+    tweenRef[1] = t
+    t.Completed:Connect(function(playbackState)
+        if tweenRef[1] == t then
+            tweenRef[1] = nil
+        end
+    end)
+    t:Play()
+end
+
+local function slideOut(panel, tweenRef, onDone)
+    cancelPanelTween(tweenRef)
+
+    local t = TweenService:Create(panel, TweenInfo.new(0.22, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
+        Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
+    })
+    tweenRef[1] = t
+    local transitionId = panelTransitionId
+
+    t.Completed:Connect(function(playbackState)
+        if tweenRef[1] ~= t then return end
+        tweenRef[1] = nil
+
+        -- Cancelled tweens must never finish a panel swap.
+        if playbackState ~= Enum.PlaybackState.Completed then return end
+
+        panel.Visible = false
+        if onDone and transitionId == panelTransitionId then
+            onDone()
+        end
+    end)
+    t:Play()
+end
+
+function setSettingsOpen(open)
+    panelTransitionId += 1
+    local thisTransition = panelTransitionId
+
+    if open then
+        if activePanel == "settings" and settingsMenu.Visible then return end
+
+        activePanel = "transitioning"
+        settingsOpen = false
+        statsOpen = false
+
+        -- Always stop/hide the other panel before opening Settings.
+        if statsMenu.Visible or statsTweenHolder[1] then
+            cancelPanelTween(statsTweenHolder)
+            statsMenu.Visible = false
+            statsMenu.Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
+        end
 
         collapseM1Expander()
-        menuSizeTween = TweenService:Create(settingsMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, SETTINGS_WIDTH, 0, 0)
-        })
-        menuSizeTween:Play()
-        menuSizeTween.Completed:Connect(function()
-            if not settingsOpen then
-                settingsMenu.Visible = false
-            end
-        end)
-    end
-end
-function setStatsOpen(open)
-    statsOpen = open
-    if statsSizeTween then statsSizeTween:Cancel() end
-    if open then
-        syncStatsMenuPosition()
-        statsMenu.Visible = true
-
-        statsSizeTween = TweenService:Create(statsMenu, TweenInfo.new(0.3, Enum.EasingStyle.Back, Enum.EasingDirection.Out), {
-            Size = UDim2.new(0, STATS_WIDTH, 0, STATS_HEIGHT)
-        })
-        statsSizeTween:Play()
+        settingsOpen = true
+        activePanel = "settings"
+        if thisTransition == panelTransitionId then
+            slideIn(settingsMenu, settingsTweenHolder)
+        end
     else
-        statsSizeTween = TweenService:Create(statsMenu, TweenInfo.new(0.2, Enum.EasingStyle.Quad, Enum.EasingDirection.In), {
-            Size = UDim2.new(0, STATS_WIDTH, 0, 0)
-        })
-        statsSizeTween:Play()
-        statsSizeTween.Completed:Connect(function()
-            if not statsOpen then
-                statsMenu.Visible = false
-            end
-        end)
+        if activePanel ~= "settings" and not settingsMenu.Visible then return end
+
+        activePanel = nil
+        settingsOpen = false
+        collapseM1Expander()
+        slideOut(settingsMenu, settingsTweenHolder)
     end
 end
+
+function setStatsOpen(open)
+    panelTransitionId += 1
+    local thisTransition = panelTransitionId
+
+    if open then
+        if activePanel == "stats" and statsMenu.Visible then return end
+
+        activePanel = "transitioning"
+        settingsOpen = false
+        statsOpen = false
+
+        -- Always stop/hide the other panel before opening Statistics.
+        if settingsMenu.Visible or settingsTweenHolder[1] then
+            cancelPanelTween(settingsTweenHolder)
+            settingsMenu.Visible = false
+            settingsMenu.Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
+        end
+
+        collapseM1Expander()
+        statsOpen = true
+        activePanel = "stats"
+        if thisTransition == panelTransitionId then
+            slideIn(statsMenu, statsTweenHolder)
+        end
+    else
+        if activePanel ~= "stats" and not statsMenu.Visible then return end
+
+        activePanel = nil
+        statsOpen = false
+        slideOut(statsMenu, statsTweenHolder)
+    end
+end
+
 gearButton.MouseButton1Click:Connect(function()
-    setSettingsOpen(not settingsOpen)
+    if activePanel == "settings" then
+        setSettingsOpen(false)
+    else
+        setSettingsOpen(true)
+    end
 end)
+
 statsButton.MouseButton1Click:Connect(function()
-    setStatsOpen(not statsOpen)
+    if activePanel == "stats" then
+        setStatsOpen(false)
+    else
+        setStatsOpen(true)
+    end
 end)
 function updatePingDisplay()
     if enabled.ping then
@@ -2132,13 +2212,13 @@ function cleanupScript()
     end
     table.clear(dragConnections)
 
-    if menuSizeTween then
-        pcall(function() menuSizeTween:Cancel() end)
-        menuSizeTween = nil
+    if settingsTweenHolder and settingsTweenHolder[1] then
+        pcall(function() settingsTweenHolder[1]:Cancel() end)
+        settingsTweenHolder[1] = nil
     end
-    if statsSizeTween then
-        pcall(function() statsSizeTween:Cancel() end)
-        statsSizeTween = nil
+    if statsTweenHolder and statsTweenHolder[1] then
+        pcall(function() statsTweenHolder[1]:Cancel() end)
+        statsTweenHolder[1] = nil
     end
 
     if screenGui and screenGui.Parent then
