@@ -29,8 +29,8 @@ PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 ALLOWED_PLACE_ID = 10449761463
 IS_ALLOWED_GAME = (game.PlaceId == ALLOWED_PLACE_ID)
 COLORS = {
-    background   = Color3.fromRGB(13, 17, 40),
-    panel        = Color3.fromRGB(16, 21, 48),
+    background   = Color3.fromRGB(0, 0, 0),
+    panel        = Color3.fromRGB(0, 0, 0),
     accent       = Color3.fromRGB(130, 90, 255),
     unloadRed    = Color3.fromRGB(221, 28, 28),
     disabledGray = Color3.fromRGB(140, 140, 140),
@@ -38,7 +38,7 @@ COLORS = {
     toggleOff    = Color3.fromRGB(200, 60, 60),
     white        = Color3.fromRGB(255, 255, 255),
 }
-PANEL_TRANSPARENCY   = 0.08
+PANEL_TRANSPARENCY   = 0.18
 ELEMENT_TRANSPARENCY = 0.12
 M1_DEFAULT_COLOR = Color3.fromRGB(255, 60, 60)
 currentM1Color = M1_DEFAULT_COLOR
@@ -846,6 +846,11 @@ topBar.BackgroundColor3 = COLORS.background
 topBar.BackgroundTransparency = PANEL_TRANSPARENCY
 topBar.BorderSizePixel = 0
 topBar.Parent = screenGui
+topBarStroke = Instance.new("UIStroke")
+topBarStroke.Color = COLORS.white
+topBarStroke.Thickness = 1
+topBarStroke.Transparency = 0
+topBarStroke.Parent = topBar
 topBarCorner = Instance.new("UICorner")
 topBarCorner.CornerRadius = UDim.new(0, 18)
 topBarCorner.Parent = topBar
@@ -1040,6 +1045,11 @@ settingsMenu.ClipsDescendants = true
 settingsMenu.Visible = false
 settingsMenu.ZIndex = 10
 settingsMenu.Parent = screenGui
+settingsMenuStroke = Instance.new("UIStroke")
+settingsMenuStroke.Color = COLORS.white
+settingsMenuStroke.Thickness = 1
+settingsMenuStroke.Transparency = 0
+settingsMenuStroke.Parent = settingsMenu
 function syncSettingsMenuPosition()
     -- No-op: panels are now fixed to left edge, not tied to topBar
 end
@@ -1084,6 +1094,11 @@ statsMenu.ClipsDescendants = true
 statsMenu.Visible = false
 statsMenu.ZIndex = 10
 statsMenu.Parent = screenGui
+statsMenuStroke = Instance.new("UIStroke")
+statsMenuStroke.Color = COLORS.white
+statsMenuStroke.Thickness = 1
+statsMenuStroke.Transparency = 0
+statsMenuStroke.Parent = statsMenu
 function syncStatsMenuPosition()
     -- No-op: panels are now fixed to left edge, not tied to topBar
 end
