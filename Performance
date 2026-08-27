@@ -43,10 +43,6 @@ ELEMENT_TRANSPARENCY = 0.12
 M1_DEFAULT_COLOR = Color3.fromRGB(255, 60, 60)
 currentM1Color = M1_DEFAULT_COLOR
 
-
-
-
-
 VFXConfig = {
     Enabled = false,
     TargetColor = currentM1Color,
@@ -61,9 +57,6 @@ VFXConfig = {
     RecolorDecals = false,
     RecolorMeshes = true,
 }
-
-
-
 
 VFX_DECAL_ALLOWLIST = {
     KickShockwave = true,
@@ -153,19 +146,8 @@ antiAfkVirtualUser = nil
 antiAfkLastAction = 0
 antiAfkRunning = false
 
-
-
-
-
-
-
-
-
 function antiAFKPulse()
     if not enabled.antiafk or unloaded then return end
-
-
-
 
     local camera = workspace.CurrentCamera
     if not camera then return end
@@ -206,9 +188,6 @@ function startAntiAFK()
         antiAFKPulse()
     end)
 
-
-
-
     antiAfkRunning = true
     antiAfkConnection = task.spawn(function()
         while antiAfkRunning and not unloaded do
@@ -224,9 +203,6 @@ function startAntiAFK()
 end
 
 function stopAntiAFK()
-
-
-
     antiAfkRunning = false
     antiAfkConnection = nil
 
@@ -420,11 +396,6 @@ function transformColorSequence(sequence)
 
     return ColorSequence.new(newKeypoints)
 end
-
-
-
-
-
 
 -- Build a fast lookup set for shared VFX folder names
 local VFX_WATCH_ROOT_SET = {}
@@ -663,13 +634,510 @@ function refreshActiveVFXColor()
     end
 end
 
+CUSTOM_AWAKENING_BAR_IMAGE = "rbxassetid://7884720727"
+CUSTOM_MOVE_COOLDOWN_COLOR = Color3.fromRGB(255, 78, 78)
+CUSTOM_DASH_COOLDOWN_COLOR = Color3.fromRGB(255, 78, 78)
+CUSTOM_BURST_COLOR = Color3.fromRGB(189, 64, 64)
+
+customColorUIObjects = {}
+customColorUIOriginals = {}
+customColorUIConnections = {}
+customColorUIRootConnections = {}
+customColorUISession = 0
+
+local TextChatService = game:GetService("TextChatService")
+local chatWindowConfiguration = TextChatService:FindFirstChildOfClass("ChatWindowConfiguration")
+local customChatInstalled = false
+local customChatWrapper = nil
+local customChatPreviousCallback = nil
+local customChatMonitorRunning = false
+local customChatSession = 0
+
+local function installCustomChatColor()
+    if customChatInstalled or not enabled.m1color or unloaded then
+        return
+    end
+
+    customChatSession += 1
+    local session = customChatSession
+
+    chatWindowConfiguration =
+        chatWindowConfiguration
+        or TextChatService:FindFirstChildOfClass("ChatWindowConfiguration")
+
+    if not chatWindowConfiguration then
+        task.spawn(function()
+            local cfg = TextChatService:WaitForChild("ChatWindowConfiguration", 10)
+            if session ~= customChatSession or not enabled.m1color or unloaded then
+                return
+            end
+
+            chatWindowConfiguration = cfg
+            if chatWindowConfiguration then
+                installCustomChatColor()
+            end
+        end)
+        return
+    end
+
+    local ok, existingCallback = pcall(function()
+        return TextChatService.OnChatWindowAdded
+    end)
+
+    if ok and existingCallback ~= customChatWrapper then
+        customChatPreviousCallback = existingCallback
+    else
+        customChatPreviousCallback = nil
+    end
+
+    customChatWrapper = function(message)
+        if not enabled.m1color or unloaded then
+            return nil
+        end
+
+        -- Never return a ChatWindowMessageProperties object for other players.
+        -- That lets Roblox keep its native username/team color and formatting.
+        if not message
+            or not message.TextSource
+            or message.TextSource.UserId ~= LocalPlayer.UserId then
+            return nil
+        end
+
+        local cfg = chatWindowConfiguration
+            or TextChatService:FindFirstChildOfClass("ChatWindowConfiguration")
+
+        local properties
+
+        -- Start with the game's existing callback if one exists.
+        if customChatPreviousCallback then
+            local callbackOk, result = pcall(customChatPreviousCallback, message)
+            if callbackOk
+                and typeof(result) == "Instance"
+                and result:IsA("ChatWindowMessageProperties") then
+                properties = result
+            end
+        end
+
+        -- If the game does not provide a callback result, derive the normal
+        -- message properties so the chat keeps its standard appearance.
+        if not properties and cfg then
+            local deriveOk, derived = pcall(function()
+                return cfg:DeriveNewMessageProperties()
+            end)
+            if deriveOk and derived then
+                properties = derived
+            end
+        end
+
+        if not properties then
+            local createOk, created = pcall(function()
+                return Instance.new("ChatWindowMessageProperties")
+            end)
+            if createOk then
+                properties = created
+            end
+        end
+
+        if not properties then
+            return nil
+        end
+
+        -- Preserve Roblox's normal display-name color for THIS user.
+        -- The body text gets the custom color, while the prefix remains
+        -- username/team-colored.
+        local prefixProperties
+        if cfg then
+            local prefixOk, derivedPrefix = pcall(function()
+                return cfg:DeriveNewMessageProperties()
+            end)
+            if prefixOk and derivedPrefix then
+                prefixProperties = derivedPrefix
+            end
+        end
+
+        if not prefixProperties then
+            local prefixOk, fallbackPrefix = pcall(function()
+                return Instance.new("ChatWindowMessageProperties")
+            end)
+            if prefixOk then
+                prefixProperties = fallbackPrefix
+            end
+        end
+
+        if prefixProperties then
+            local nameColor = nil
+
+            if LocalPlayer.Team ~= nil then
+                nameColor = LocalPlayer.TeamColor.Color
+            else
+                -- Roblox's default username color palette.
+                local colors = {
+                    BrickColor.new("Bright red").Color,
+                    BrickColor.new("Bright blue").Color,
+                    BrickColor.new("Bright green").Color,
+                    BrickColor.new("Bright violet").Color,
+                    BrickColor.new("Bright orange").Color,
+                    BrickColor.new("Bright yellow").Color,
+                    BrickColor.new("Light reddish violet").Color,
+                    BrickColor.new("Brick yellow").Color,
+                }
+
+                local value = 0
+                local username = tostring(LocalPlayer.Name or "")
+                local length = #username
+
+                for i = 1, length do
+                    local byte = string.byte(username, i)
+                    local reverseIndex = length - i + 1
+                    local cValue = byte
+
+                    if reverseIndex % 2 == 0 then
+                        cValue = -cValue
+                    end
+
+                    if length % 2 == 1 then
+                        reverseIndex = reverseIndex - 1
+                    end
+
+                    if reverseIndex % 4 >= 2 then
+                        cValue = -cValue
+                    end
+
+                    value += cValue
+                end
+
+                nameColor = colors[(value % #colors) + 1]
+            end
+
+            prefixProperties.TextColor3 = nameColor
+            properties.PrefixTextProperties = prefixProperties
+        end
+
+        -- ONLY the local player's message body is recolored.
+        properties.TextColor3 = currentM1Color
+
+        return properties
+    end
+
+    local setOk = pcall(function()
+        TextChatService.OnChatWindowAdded = customChatWrapper
+    end)
+
+    customChatInstalled = setOk
+
+    if not setOk then
+        customChatWrapper = nil
+        customChatPreviousCallback = nil
+        return
+    end
+
+    if not customChatMonitorRunning then
+        customChatMonitorRunning = true
+        task.spawn(function()
+            while customChatMonitorRunning and enabled.m1color and not unloaded do
+                task.wait(1)
+                if not customChatMonitorRunning or not enabled.m1color or unloaded then
+                    break
+                end
+
+                local pollOk, current = pcall(function()
+                    return TextChatService.OnChatWindowAdded
+                end)
+
+                if pollOk and current ~= customChatWrapper then
+                    customChatMonitorRunning = false
+                    customChatInstalled = false
+                    installCustomChatColor()
+                    break
+                end
+            end
+        end)
+    end
+end
+
+local function uninstallCustomChatColor()
+    -- Invalidate any pending WaitForChild/install task before restoring the
+    -- callback. This prevents the hook from coming back after the toggle is off.
+    customChatSession += 1
+    customChatMonitorRunning = false
+
+    local wrapper = customChatWrapper
+    local previous = customChatPreviousCallback
+
+    pcall(function()
+        if wrapper and TextChatService.OnChatWindowAdded == wrapper then
+            TextChatService.OnChatWindowAdded = previous
+        end
+    end)
+
+    customChatWrapper = nil
+    customChatPreviousCallback = nil
+    customChatInstalled = false
+end
+
+local function refreshCustomChatColor()
+    -- New messages read currentM1Color and the current default username color.
+end
+
+local function isCustomColorUIObject(obj)
+    if not obj or not obj.Parent then
+        return false
+    end
+
+    -- Never touch CosmicFrames or anything inside them.
+    local ancestor = obj
+    while ancestor do
+        if ancestor.Name == "CosmicFrames" then
+            return false
+        end
+        ancestor = ancestor.Parent
+    end
+
+    if (obj:IsA("ImageLabel") or obj:IsA("ImageButton"))
+        and obj.Image == CUSTOM_AWAKENING_BAR_IMAGE then
+        return "Awakening"
+    end
+
+    if obj:IsA("Frame") and obj.Name == "Cooldown" then
+        -- The move hotbar cooldown has an Overlay sibling.
+        if obj.Parent and obj.Parent:FindFirstChild("Overlay") then
+            return "MoveCooldown"
+        end
+    end
+
+    if obj:IsA("Frame") and obj.Name == "Fill" then
+        -- The supplied dash/evasive/burst indicator script creates these under
+        -- the cooldown holder or the burst holder.
+        local parent = obj.Parent
+        while parent do
+            if parent.Name == "cdholder" then
+                return "DashCooldown"
+            end
+            if parent.Name == "burster" then
+                return "Burst"
+            end
+            parent = parent.Parent
+        end
+    end
+
+    return false
+end
+
+local function getCustomColorForUIKind(kind)
+    if kind == "Awakening" then
+        return currentM1Color
+    elseif kind == "MoveCooldown" then
+        return currentM1Color
+    elseif kind == "DashCooldown" then
+        return currentM1Color
+    elseif kind == "Burst" then
+        return currentM1Color
+    end
+    return currentM1Color
+end
+
+local function cacheCustomColorUIObject(obj, prop)
+    if not obj or not obj.Parent then
+        return
+    end
+
+    customColorUIObjects[obj] = true
+    customColorUIOriginals[obj] = customColorUIOriginals[obj] or {}
+
+    if customColorUIOriginals[obj][prop] == nil then
+        customColorUIOriginals[obj][prop] = obj[prop]
+    end
+end
+
+local function applyCustomColorToUIObject(obj)
+    if not VFXConfig.Enabled or not obj or not obj.Parent then
+        return
+    end
+
+    local kind = isCustomColorUIObject(obj)
+    if not kind then
+        return
+    end
+
+    pcall(function()
+        if kind == "Awakening" then
+            cacheCustomColorUIObject(obj, "ImageColor3")
+            obj.ImageColor3 = currentM1Color
+        else
+            cacheCustomColorUIObject(obj, "BackgroundColor3")
+            obj.BackgroundColor3 = currentM1Color
+        end
+    end)
+end
+
+local function disconnectCustomColorUI()
+    for _, conn in ipairs(customColorUIConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(customColorUIConnections)
+
+    for _, conn in ipairs(customColorUIRootConnections) do
+        pcall(function() conn:Disconnect() end)
+    end
+    table.clear(customColorUIRootConnections)
+end
+
+local function restoreCustomColorUI()
+    for obj in pairs(customColorUIObjects) do
+        local cache = customColorUIOriginals[obj]
+        if cache and obj and obj.Parent then
+            pcall(function()
+                for prop, originalValue in pairs(cache) do
+                    obj[prop] = originalValue
+                end
+            end)
+        end
+    end
+
+    table.clear(customColorUIObjects)
+    table.clear(customColorUIOriginals)
+end
+
+local function watchCustomColorUIRoot(root, sessionId)
+    if not root or not VFXConfig.Enabled or sessionId ~= customColorUISession then
+        return
+    end
+
+    for _, obj in ipairs(root:GetDescendants()) do
+        if not VFXConfig.Enabled or sessionId ~= customColorUISession then
+            return
+        end
+        applyCustomColorToUIObject(obj)
+    end
+
+    local conn = root.DescendantAdded:Connect(function(obj)
+        if not VFXConfig.Enabled or sessionId ~= customColorUISession then
+            return
+        end
+        applyCustomColorToUIObject(obj)
+    end)
+    table.insert(customColorUIRootConnections, conn)
+end
+
+local function startCustomColorUIWatcher()
+    disconnectCustomColorUI()
+    restoreCustomColorUI()
+
+    customColorUISession += 1
+    local sessionId = customColorUISession
+
+    if not VFXConfig.Enabled then
+        return
+    end
+
+    watchCustomColorUIRoot(PlayerGui, sessionId)
+
+    -- The hotbar/ultimate UI can be rebuilt when the character changes.
+    local conn = LocalPlayer.CharacterAdded:Connect(function()
+        if not VFXConfig.Enabled or sessionId ~= customColorUISession then
+            return
+        end
+
+        task.wait(0.5)
+
+        if VFXConfig.Enabled and sessionId == customColorUISession then
+            watchCustomColorUIRoot(PlayerGui, sessionId)
+        end
+    end)
+    table.insert(customColorUIConnections, conn)
+
+    -- Game code can change these properties after creation (for example when
+    -- Burst reaches 100%). Re-apply the selected custom color while enabled.
+    local tracked = {}
+    local function trackObject(obj)
+        if tracked[obj] then
+            return
+        end
+
+        local kind = isCustomColorUIObject(obj)
+        if not kind then
+            return
+        end
+
+        tracked[obj] = true
+
+        local prop = (kind == "Awakening") and "ImageColor3" or "BackgroundColor3"
+        local propertyConn = obj:GetPropertyChangedSignal(prop):Connect(function()
+            if not VFXConfig.Enabled or sessionId ~= customColorUISession then
+                return
+            end
+
+            if obj.Parent and isCustomColorUIObject(obj) then
+                local wanted = getCustomColorForUIKind(kind)
+                if obj[prop] ~= wanted then
+                    obj[prop] = wanted
+                end
+            end
+        end)
+
+        table.insert(customColorUIConnections, propertyConn)
+        applyCustomColorToUIObject(obj)
+    end
+
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        trackObject(obj)
+    end
+
+    local rootTrackConn = PlayerGui.DescendantAdded:Connect(function(obj)
+        if not VFXConfig.Enabled or sessionId ~= customColorUISession then
+            return
+        end
+
+        -- Apply immediately, then hook the property so game updates cannot
+        -- overwrite the custom color during the active session.
+        trackObject(obj)
+        for _, child in ipairs(obj:GetDescendants()) do
+            trackObject(child)
+        end
+    end)
+    table.insert(customColorUIConnections, rootTrackConn)
+end
+
+local function stopCustomColorUIWatcher()
+    customColorUISession += 1
+    disconnectCustomColorUI()
+    restoreCustomColorUI()
+end
+
+function refreshActiveCustomColors()
+    if not VFXConfig.Enabled then
+        return
+    end
+
+    VFXConfig.TargetColor = currentM1Color
+    refreshActiveVFXColor()
+
+    for obj in pairs(customColorUIObjects) do
+        if obj and obj.Parent then
+            applyCustomColorToUIObject(obj)
+        end
+    end
+
+    -- Catch UI elements that were rebuilt without firing a useful descendant
+    -- callback before the color was applied.
+    if PlayerGui then
+        for _, obj in ipairs(PlayerGui:GetDescendants()) do
+            applyCustomColorToUIObject(obj)
+        end
+    end
+end
+
 function applyM1TrailColor(useCustom)
     if useCustom then
         VFXConfig.TargetColor = currentM1Color
         VFXConfig.Enabled = true
         startVFXWatcher()
+        startCustomColorUIWatcher()
+        installCustomChatColor()
     else
         stopVFXWatcher()
+        stopCustomColorUIWatcher()
+        uninstallCustomChatColor()
     end
 end
 
@@ -785,6 +1253,8 @@ if savedPrefs.toggles then
         end
     end
 end
+-- "m1color" is retained as the internal preference key for backwards compatibility;
+-- the user-facing feature is now named "Custom Colors".
 function persistPosition(pos)
     savedPrefs.x = pos.X.Offset
     savedPrefs.y = pos.Y.Offset
@@ -882,10 +1352,6 @@ pingValue    = createStatCell(20,                                               
 fpsValue     = createStatCell(20 + (STAT_CELL_WIDTH + STAT_CELL_GAP),             105, "FPS")
 monthlyValue = createStatCell(20 + (STAT_CELL_WIDTH + STAT_CELL_GAP) * 2,         105, "MONTHLY")
 totalValue   = createStatCell(20 + (STAT_CELL_WIDTH + STAT_CELL_GAP) * 3,         105, "TOTAL")
-
-
-
-
 
 lockButton = Instance.new("TextButton")
 lockButton.Name = "LockButton"
@@ -1018,13 +1484,10 @@ tooltipCorner.CornerRadius = UDim.new(0, 6)
 tooltipCorner.Parent = tooltip
 gearButton.MouseEnter:Connect(function() tooltip.Visible = true end)
 gearButton.MouseLeave:Connect(function() tooltip.Visible = false end)
-local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 555
+local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 577
 
 local STATS_HEIGHT = SETTINGS_HEIGHT
 SETTINGS_GAP = 8
-
-
-
 
 local PANEL_CENTER_OFFSET = 26
 
@@ -1079,8 +1542,6 @@ settingsDividerCorner = Instance.new("UICorner")
 settingsDividerCorner.CornerRadius = UDim.new(1, 0)
 settingsDividerCorner.Parent = settingsDivider
 
-
-
 local STATS_WIDTH = 300
 
 statsMenu = Instance.new("Frame")
@@ -1103,7 +1564,6 @@ function syncStatsMenuPosition()
     -- No-op: panels are now fixed to left edge, not tied to topBar
 end
 syncStatsMenuPosition()
-
 
 statsHeaderLabel = Instance.new("TextLabel")
 statsHeaderLabel.Name = "StatsHeader"
@@ -1130,7 +1590,6 @@ divider.Parent = statsMenu
 dividerCorner = Instance.new("UICorner")
 dividerCorner.CornerRadius = UDim.new(1, 0)
 dividerCorner.Parent = divider
-
 
 stopwatchLabel = Instance.new("TextLabel")
 stopwatchLabel.Name = "SessionStopwatch"
@@ -1164,13 +1623,12 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.14"
+versionLabel.Text = "Version 3.15"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
 versionLabel.ZIndex = 11
 versionLabel.Parent = statsMenu
-
 
 sessionKillsLabel = Instance.new("TextLabel")
 sessionKillsLabel.Name = "SessionKills"
@@ -1233,7 +1691,6 @@ nextEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
 nextEmoteLabel.ZIndex = 11
 nextEmoteLabel.Parent = statsMenu
 
-
 emotesOwnedLabel = Instance.new("TextLabel")
 emotesOwnedLabel.Name = "EmotesOwned"
 emotesOwnedLabel.BackgroundTransparency = 1
@@ -1246,7 +1703,6 @@ emotesOwnedLabel.TextSize = 16
 emotesOwnedLabel.TextXAlignment = Enum.TextXAlignment.Left
 emotesOwnedLabel.ZIndex = 11
 emotesOwnedLabel.Parent = statsMenu
-
 
 emotesDisclaimerLabel = Instance.new("TextLabel")
 emotesDisclaimerLabel.Name = "EmotesDisclaimer"
@@ -1351,19 +1807,9 @@ executionToggle = createToggleRow("Execution", 174, "Execution", "execution", fa
 playerCountToggle = createToggleRow("PlayerCount", 204, "Players", "playercount", false, function() updatePlayerCountDisplay() end)
 emotesToggle = createToggleRow("Emotes", 234, "Emotes", "emotes", emoteLocked, function() updateEmoteDisplay() end)
 antiAfkToggle = createToggleRow("AntiAFK", 264, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
-m1ColorToggle = createToggleRow("M1Color", 294, "Custom VFX Color", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
-
-
-
-
-
-
-
-
-
+m1ColorToggle = createToggleRow("M1Color", 294, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
 
 m1SwatchExpanded = false
-
 
 m1ExpandButton = Instance.new("TextButton")
 m1ExpandButton.Name = "M1ColorExpandButton"
@@ -1381,8 +1827,6 @@ m1ExpandButton.Parent = settingsMenu
 m1ExpandButtonCorner = Instance.new("UICorner")
 m1ExpandButtonCorner.CornerRadius = UDim.new(0, 6)
 m1ExpandButtonCorner.Parent = m1ExpandButton
-
-
 
 m1HexBox = Instance.new("TextBox")
 m1HexBox.Name = "M1ColorHexBox"
@@ -1483,8 +1927,6 @@ function makeColorTooltip(parent, text, width)
 end
 
 m1ColorActionButtons = {}
-
-
 
 m1FavoriteButton = Instance.new("TextButton")
 m1FavoriteButton.Name = "M1ColorFavoriteButton"
@@ -1660,7 +2102,6 @@ function openM1FavoritesDropdown()
     m1FavoritesDropdownOpen = true
 end
 
-
 function collapseM1Expander()
     if m1SwatchExpanded then
         m1SwatchExpanded = false
@@ -1709,7 +2150,7 @@ m1ApplyButton.MouseButton1Click:Connect(function()
     pulseColorButton(m1ApplyButtonStroke, Color3.fromRGB(70, 220, 110), "apply")
 
     if enabled.m1color then
-        refreshActiveVFXColor()
+        refreshActiveCustomColors()
     end
 end)
 
@@ -1733,24 +2174,31 @@ end)
 
 applyM1TrailColor(enabled.m1color)
 applyAntiAFK(enabled.antiafk)
+
+-- ── FIX: disclaimer moved directly above the Unload button ───────────────────
+-- Old Y: 444. New Y: 462, so it sits flush above the button at 530.
+-- Text rewritten as one clean string with no mid-sentence line breaks
+-- that could cause word-squash in Roblox's text renderer.
 favoriteHintLabel = Instance.new("TextLabel")
 favoriteHintLabel.Name = "FavoriteHint"
 favoriteHintLabel.BackgroundTransparency = 1
-favoriteHintLabel.Position = UDim2.new(0, 20, 0, 474)
-favoriteHintLabel.Size = UDim2.new(1, -40, 0, 32)
+favoriteHintLabel.Position = UDim2.new(0, 20, 0, 485)
+favoriteHintLabel.Size = UDim2.new(1, -40, 0, 58)
 favoriteHintLabel.Font = Enum.Font.Gotham
-favoriteHintLabel.Text = "Double-Click A Favorite Color To Remove It. Maximum Of Seven."
+favoriteHintLabel.Text = "Custom colors toggle changes VFX, ultimate bar, skill cooldowns, dash cooldowns, evasive indicators, and your chat messages color. Double-click to remove favorites, there's a maximum of seven."
 favoriteHintLabel.TextColor3 = COLORS.disabledGray
-favoriteHintLabel.TextSize = 12
+favoriteHintLabel.TextSize = 9
 favoriteHintLabel.TextWrapped = true
 favoriteHintLabel.TextXAlignment = Enum.TextXAlignment.Left
+favoriteHintLabel.TextYAlignment = Enum.TextYAlignment.Top
 favoriteHintLabel.Visible = IS_ALLOWED_GAME
 favoriteHintLabel.ZIndex = 11
 favoriteHintLabel.Parent = settingsMenu
 
+-- ── FIX: unload button shifted down 22 px to sit below the disclaimer ────────
 unloadButton = Instance.new("TextButton")
 unloadButton.Name = "UnloadButton"
-unloadButton.Position = UDim2.new(0, 20, 0, 508)
+unloadButton.Position = UDim2.new(0, 20, 0, 530)
 unloadButton.Size = UDim2.new(1, -40, 0, 36)
 unloadButton.BackgroundColor3 = COLORS.unloadRed
 unloadButton.BackgroundTransparency = ELEMENT_TRANSPARENCY
@@ -2183,6 +2631,10 @@ function cleanupScript()
     end
 
     unloaded = true
+
+    pcall(function()
+        uninstallCustomChatColor()
+    end)
 
     pcall(function()
         if topBar and topBar.Parent then
