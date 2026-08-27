@@ -21,7 +21,7 @@ enabled = {
 Players = game:GetService("Players")
 RunService = game:GetService("RunService")
 TweenService = game:GetService("TweenService")
-Stats = game:GetService("Stats")
+local Stats = game:GetService("Stats")
 HttpService = game:GetService("HttpService")
 UserInputService = game:GetService("UserInputService")
 LocalPlayer = Players.LocalPlayer
@@ -99,23 +99,64 @@ function isInDecalAllowlist(obj)
     end
     return false
 end
-VFX_MESH_ALLOWLIST = {
-    Dragon = true,
+-- Dragon mesh recoloring: matches any BasePart inside one of the three dragon
+-- model roots, but explicitly skips eyes and teeth on all three dragons.
+local DRAGON_ROOT_NAMES = {
+    Dragon     = true,
+    OtherDragon = true,
+    RedDragon  = true,
 }
-function isInMeshAllowlist(obj)
-    if VFX_MESH_ALLOWLIST[obj.Name] then
-        return true
-    end
+
+-- Exact MeshPart names that must never be recolored regardless of which dragon
+local DRAGON_MESH_DENY = {
+    -- Eyes
+    ["eyes.001"] = true,  -- RedDragon
+    ["Eyes"]     = true,  -- Dragon
+    ["Eyes.001"] = true,  -- OtherDragon
+
+    -- Teeth and tooth outlines (RedDragon)
+    ["UpperTeeth.005"]   = true,
+    ["UpperTeeth.006"]   = true,
+    ["LowrTeeth.005"]    = true,
+    ["LowrTeeth.006"]    = true,
+
+    -- Teeth and tooth outlines (Dragon)
+    ["UpperTeeth"]        = true,
+    ["LowrTeeth"]         = true,
+    ["UpperTeethOutline"] = true,
+    ["LowrTeethOutLine"]  = true,
+
+    -- Teeth and tooth outlines (OtherDragon)
+    ["UpperTeeth.001"]        = true,
+    ["LowrTeeth.001"]         = true,
+    ["UpperTeethOutline.001"] = true,
+    ["LowrTeethOutLine.001"]  = true,
+}
+
+-- Returns true if obj is a descendant of one of the three dragon model roots
+local function isInsideDragonRoot(obj)
     local ancestor = obj.Parent
     while ancestor do
-        if VFX_MESH_ALLOWLIST[ancestor.Name] then
+        if DRAGON_ROOT_NAMES[ancestor.Name] then
             return true
         end
         ancestor = ancestor.Parent
     end
     return false
 end
-VFX_WATCH_ROOT_NAMES = { "Live", "Thrown" }
+
+function isInMeshAllowlist(obj)
+    -- Must be inside a known dragon model root
+    if not isInsideDragonRoot(obj) then
+        return false
+    end
+    -- Eyes and teeth are explicitly excluded
+    if DRAGON_MESH_DENY[obj.Name] then
+        return false
+    end
+    return true
+end
+VFX_WATCH_ROOT_NAMES = { "Live", "Thrown", "Dragon" }
 EMOTE_KILL_INTERVAL = 50
 LIMITED_EMOTE_NAMES = {
     ["Boundless Rage"]     = true,
@@ -641,6 +682,7 @@ CUSTOM_BURST_COLOR = Color3.fromRGB(189, 64, 64)
 
 customColorUIObjects = {}
 customColorUIOriginals = {}
+customColorUIBaselines = {}
 customColorUIConnections = {}
 customColorUIRootConnections = {}
 customColorUISession = 0
@@ -742,9 +784,7 @@ local function installCustomChatColor()
             return nil
         end
 
-        -- Preserve Roblox's normal display-name color for THIS user.
-        -- The body text gets the custom color, while the prefix remains
-        -- username/team-colored.
+        -- Recolor both the display name prefix and the message body.
         local prefixProperties
         if cfg then
             local prefixOk, derivedPrefix = pcall(function()
@@ -765,55 +805,10 @@ local function installCustomChatColor()
         end
 
         if prefixProperties then
-            local nameColor = nil
-
-            if LocalPlayer.Team ~= nil then
-                nameColor = LocalPlayer.TeamColor.Color
-            else
-                -- Roblox's default username color palette.
-                local colors = {
-                    BrickColor.new("Bright red").Color,
-                    BrickColor.new("Bright blue").Color,
-                    BrickColor.new("Bright green").Color,
-                    BrickColor.new("Bright violet").Color,
-                    BrickColor.new("Bright orange").Color,
-                    BrickColor.new("Bright yellow").Color,
-                    BrickColor.new("Light reddish violet").Color,
-                    BrickColor.new("Brick yellow").Color,
-                }
-
-                local value = 0
-                local username = tostring(LocalPlayer.Name or "")
-                local length = #username
-
-                for i = 1, length do
-                    local byte = string.byte(username, i)
-                    local reverseIndex = length - i + 1
-                    local cValue = byte
-
-                    if reverseIndex % 2 == 0 then
-                        cValue = -cValue
-                    end
-
-                    if length % 2 == 1 then
-                        reverseIndex = reverseIndex - 1
-                    end
-
-                    if reverseIndex % 4 >= 2 then
-                        cValue = -cValue
-                    end
-
-                    value += cValue
-                end
-
-                nameColor = colors[(value % #colors) + 1]
-            end
-
-            prefixProperties.TextColor3 = nameColor
+            prefixProperties.TextColor3 = currentM1Color
             properties.PrefixTextProperties = prefixProperties
         end
 
-        -- ONLY the local player's message body is recolored.
         properties.TextColor3 = currentM1Color
 
         return properties
@@ -875,10 +870,6 @@ local function uninstallCustomChatColor()
     customChatInstalled = false
 end
 
-local function refreshCustomChatColor()
-    -- New messages read currentM1Color and the current default username color.
-end
-
 local function isCustomColorUIObject(obj)
     if not obj or not obj.Parent then
         return false
@@ -936,16 +927,30 @@ local function getCustomColorForUIKind(kind)
     return currentM1Color
 end
 
+local function captureCustomColorUIBaseline(obj, prop)
+    if not obj or not obj.Parent then
+        return
+    end
+
+    customColorUIBaselines[obj] = customColorUIBaselines[obj] or {}
+    if customColorUIBaselines[obj][prop] == nil then
+        customColorUIBaselines[obj][prop] = obj[prop]
+    end
+end
+
 local function cacheCustomColorUIObject(obj, prop)
     if not obj or not obj.Parent then
         return
     end
 
+    -- The baseline must be captured before the custom color is applied.
+    captureCustomColorUIBaseline(obj, prop)
+
     customColorUIObjects[obj] = true
     customColorUIOriginals[obj] = customColorUIOriginals[obj] or {}
 
     if customColorUIOriginals[obj][prop] == nil then
-        customColorUIOriginals[obj][prop] = obj[prop]
+        customColorUIOriginals[obj][prop] = customColorUIBaselines[obj][prop]
     end
 end
 
@@ -982,12 +987,47 @@ local function disconnectCustomColorUI()
     table.clear(customColorUIRootConnections)
 end
 
+local function captureAllCustomColorUIBaselines()
+    if not PlayerGui then
+        return
+    end
+
+    for _, obj in ipairs(PlayerGui:GetDescendants()) do
+        local kind = isCustomColorUIObject(obj)
+        if kind then
+            local prop = (kind == "Awakening") and "ImageColor3" or "BackgroundColor3"
+            captureCustomColorUIBaseline(obj, prop)
+        end
+    end
+end
+
 local function restoreCustomColorUI()
+    -- Restore every currently existing matching UI object to its previously
+    -- captured baseline. Do NOT capture a baseline here: if the game rebuilt an
+    -- object while Custom Colors was enabled, its current color may already be
+    -- the custom color, and capturing it now would make that color permanent.
+    if PlayerGui then
+        for _, obj in ipairs(PlayerGui:GetDescendants()) do
+            local kind = isCustomColorUIObject(obj)
+            if kind then
+                local prop = (kind == "Awakening") and "ImageColor3" or "BackgroundColor3"
+                local baseline = customColorUIBaselines[obj]
+                if baseline and baseline[prop] ~= nil then
+                    pcall(function()
+                        obj[prop] = baseline[prop]
+                    end)
+                end
+            end
+        end
+    end
+
+    -- Also restore tracked objects that may no longer be discoverable through
+    -- the current hierarchy scan but are still alive.
     for obj in pairs(customColorUIObjects) do
-        local cache = customColorUIOriginals[obj]
-        if cache and obj and obj.Parent then
+        local baseline = customColorUIBaselines[obj] or customColorUIOriginals[obj]
+        if baseline and obj and obj.Parent then
             pcall(function()
-                for prop, originalValue in pairs(cache) do
+                for prop, originalValue in pairs(baseline) do
                     obj[prop] = originalValue
                 end
             end)
@@ -1007,12 +1047,22 @@ local function watchCustomColorUIRoot(root, sessionId)
         if not VFXConfig.Enabled or sessionId ~= customColorUISession then
             return
         end
+        local kind = isCustomColorUIObject(obj)
+        if kind then
+            local prop = (kind == "Awakening") and "ImageColor3" or "BackgroundColor3"
+            captureCustomColorUIBaseline(obj, prop)
+        end
         applyCustomColorToUIObject(obj)
     end
 
     local conn = root.DescendantAdded:Connect(function(obj)
         if not VFXConfig.Enabled or sessionId ~= customColorUISession then
             return
+        end
+        local kind = isCustomColorUIObject(obj)
+        if kind then
+            local prop = (kind == "Awakening") and "ImageColor3" or "BackgroundColor3"
+            captureCustomColorUIBaseline(obj, prop)
         end
         applyCustomColorToUIObject(obj)
     end)
@@ -1062,6 +1112,7 @@ local function startCustomColorUIWatcher()
         tracked[obj] = true
 
         local prop = (kind == "Awakening") and "ImageColor3" or "BackgroundColor3"
+        captureCustomColorUIBaseline(obj, prop)
         local propertyConn = obj:GetPropertyChangedSignal(prop):Connect(function()
             if not VFXConfig.Enabled or sessionId ~= customColorUISession then
                 return
@@ -1162,7 +1213,7 @@ function getAllEmotesTable()
     if cachedEmotesTable then return cachedEmotesTable end
     local ok, result = pcall(function()
         local emotesModule = game.ReplicatedStorage:FindFirstChild("Emotes")
-        return emotesModule and require(emotesModule):GetTable()
+        return emotesModule and require(emotesModule):GetTable() or nil
     end)
     if ok and result then
         cachedEmotesTable = result
@@ -1229,6 +1280,7 @@ function loadSavedPrefs()
         if isfile and readfile and isfile(PREFS_FILE) then
             return HttpService:JSONDecode(readfile(PREFS_FILE))
         end
+        return nil
     end)
     if ok and result then return result end
     return nil
@@ -1489,7 +1541,6 @@ local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 577
 local STATS_HEIGHT = SETTINGS_HEIGHT
 SETTINGS_GAP = 8
 
-local PANEL_CENTER_OFFSET = 26
 
 -- Panels slide in from left edge of screen; Y is fixed near top
 local PANEL_Y_OFFSET = 80
@@ -1623,7 +1674,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.15"
+versionLabel.Text = "Version 3.18"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -2172,6 +2223,8 @@ m1ExpandButton.MouseButton1Click:Connect(function()
     end
 end)
 
+-- Capture the game's native UI colors before Custom Colors can modify anything.
+captureAllCustomColorUIBaselines()
 applyM1TrailColor(enabled.m1color)
 applyAntiAFK(enabled.antiafk)
 
@@ -2226,12 +2279,6 @@ local function cancelPanelTween(tweenRef)
         pcall(function() tweenRef[1]:Cancel() end)
         tweenRef[1] = nil
     end
-end
-
-local function forceHidePanel(panel, tweenRef)
-    cancelPanelTween(tweenRef)
-    panel.Visible = false
-    panel.Position = UDim2.new(0, PANEL_HIDDEN_X, 0, PANEL_Y_OFFSET)
 end
 
 local function slideIn(panel, tweenRef)
@@ -2644,6 +2691,10 @@ function cleanupScript()
 
     pcall(function()
         stopVFXWatcher()
+    end)
+
+    pcall(function()
+        stopCustomColorUIWatcher()
     end)
 
     if renderConn then
