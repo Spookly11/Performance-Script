@@ -15,6 +15,7 @@ enabled = {
     playercount = true,
     emotes = false,
     antiafk = false,
+    customzoom = false,
     m1color = false,
 }
 
@@ -260,6 +261,52 @@ function applyAntiAFK(on)
         startAntiAFK()
     else
         stopAntiAFK()
+    end
+end
+
+-- Custom Max Zoom
+local customZoomOriginalDistance = nil
+local customZoomLastAppliedValue = nil
+
+local function rememberCustomZoomOriginal()
+    if LocalPlayer and customZoomOriginalDistance == nil then
+        customZoomOriginalDistance = LocalPlayer.CameraMaxZoomDistance
+    end
+end
+
+local function applyCustomMaxZoom()
+    if unloaded or not LocalPlayer or not customZoomBox then
+        return false
+    end
+
+    local value = tonumber(customZoomBox.Text)
+    if not value then
+        return false
+    end
+
+    value = math.clamp(value, 0.5, 10000)
+    value = math.floor(value * 10 + 0.5) / 10
+
+    rememberCustomZoomOriginal()
+
+    local ok = pcall(function()
+        LocalPlayer.CameraMaxZoomDistance = value
+    end)
+
+    if not ok then
+        return false
+    end
+
+    customZoomLastAppliedValue = value
+    customZoomBox.Text = tostring(value):gsub("%.0$", "")
+    return true
+end
+
+local function restoreCustomMaxZoom()
+    if LocalPlayer and customZoomOriginalDistance ~= nil then
+        pcall(function()
+            LocalPlayer.CameraMaxZoomDistance = customZoomOriginalDistance
+        end)
     end
 end
 enabled.lbstats = IS_ALLOWED_GAME
@@ -1674,7 +1721,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.18"
+versionLabel.Text = "Version 3.22"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -1858,13 +1905,209 @@ executionToggle = createToggleRow("Execution", 174, "Execution", "execution", fa
 playerCountToggle = createToggleRow("PlayerCount", 204, "Players", "playercount", false, function() updatePlayerCountDisplay() end)
 emotesToggle = createToggleRow("Emotes", 234, "Emotes", "emotes", emoteLocked, function() updateEmoteDisplay() end)
 antiAfkToggle = createToggleRow("AntiAFK", 264, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
-m1ColorToggle = createToggleRow("M1Color", 294, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
+
+customZoomLabel = Instance.new("TextLabel")
+customZoomLabel.Name = "CustomZoomLabel"
+customZoomLabel.BackgroundTransparency = 1
+customZoomLabel.Position = UDim2.new(0, 20, 0, 294)
+customZoomLabel.Size = UDim2.new(0, 132, 0, 22)
+customZoomLabel.Font = Enum.Font.Gotham
+customZoomLabel.Text = "Custom Max Zoom"
+customZoomLabel.TextColor3 = COLORS.white
+customZoomLabel.TextSize = 15
+customZoomLabel.TextXAlignment = Enum.TextXAlignment.Left
+customZoomLabel.ZIndex = 11
+customZoomLabel.Parent = settingsMenu
+
+customZoomApplyButton = Instance.new("TextButton")
+customZoomApplyButton.Name = "CustomZoomApplyButton"
+customZoomApplyButton.Position = UDim2.new(0, 156, 0, 294)
+customZoomApplyButton.Size = UDim2.new(0, 22, 0, 22)
+customZoomApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+customZoomApplyButton.AutoButtonColor = false
+customZoomApplyButton.Font = Enum.Font.GothamBold
+customZoomApplyButton.Text = "✓"
+customZoomApplyButton.TextColor3 = COLORS.white
+customZoomApplyButton.TextSize = 15
+customZoomApplyButton.ZIndex = 13
+customZoomApplyButton.Parent = settingsMenu
+
+local customZoomApplyCorner = Instance.new("UICorner")
+customZoomApplyCorner.CornerRadius = UDim.new(0, 6)
+customZoomApplyCorner.Parent = customZoomApplyButton
+
+local customZoomApplyStroke = Instance.new("UIStroke")
+customZoomApplyStroke.Thickness = 1
+customZoomApplyStroke.Color = COLORS.white
+customZoomApplyStroke.Transparency = 0.7
+customZoomApplyStroke.Parent = customZoomApplyButton
+
+customZoomBox = Instance.new("TextBox")
+customZoomBox.Name = "CustomZoomBox"
+customZoomBox.Position = UDim2.new(0, 184, 0, 294)
+customZoomBox.Size = UDim2.new(0, 48, 0, 22)
+customZoomBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+customZoomBox.BorderSizePixel = 0
+customZoomBox.ClearTextOnFocus = false
+customZoomBox.Font = Enum.Font.Gotham
+customZoomBox.Text = savedPrefs.customMaxZoom and tostring(savedPrefs.customMaxZoom) or "128"
+customZoomBox.TextColor3 = COLORS.white
+customZoomBox.TextSize = 14
+customZoomBox.ZIndex = 13
+customZoomBox.Parent = settingsMenu
+
+local customZoomBoxCorner = Instance.new("UICorner")
+customZoomBoxCorner.CornerRadius = UDim.new(0, 6)
+customZoomBoxCorner.Parent = customZoomBox
+
+local customZoomBoxStroke = Instance.new("UIStroke")
+customZoomBoxStroke.Thickness = 1
+customZoomBoxStroke.Color = COLORS.white
+customZoomBoxStroke.Transparency = 0.7
+customZoomBoxStroke.Parent = customZoomBox
+
+local customZoomFocusLine = Instance.new("Frame")
+customZoomFocusLine.Name = "FocusLine"
+customZoomFocusLine.AnchorPoint = Vector2.new(0.5, 1)
+customZoomFocusLine.Position = UDim2.new(0.5, 0, 1, 0)
+customZoomFocusLine.Size = UDim2.new(0, 0, 0, 1)
+customZoomFocusLine.BackgroundColor3 = COLORS.white
+customZoomFocusLine.BorderSizePixel = 0
+customZoomFocusLine.ZIndex = 14
+customZoomFocusLine.Parent = customZoomBox
+
+local customZoomFocusTween
+local function animateCustomZoomFocusLine(focused)
+    if customZoomFocusTween then
+        pcall(function() customZoomFocusTween:Cancel() end)
+    end
+
+    customZoomFocusTween = TweenService:Create(
+        customZoomFocusLine,
+        TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {
+            Size = focused
+                and UDim2.new(1, 0, 0, 1)
+                or UDim2.new(0, 0, 0, 1)
+        }
+    )
+    customZoomFocusTween:Play()
+end
+
+customZoomBox.Focused:Connect(function()
+    animateCustomZoomFocusLine(true)
+end)
+
+customZoomBox.FocusLost:Connect(function()
+    animateCustomZoomFocusLine(false)
+end)
+
+customZoomToggleFrame = Instance.new("Frame")
+customZoomToggleFrame.Name = "CustomZoomToggle"
+customZoomToggleFrame.Position = UDim2.new(1, -64, 0, 293)
+customZoomToggleFrame.Size = UDim2.new(0, 44, 0, 22)
+customZoomToggleFrame.BackgroundColor3 = enabled.customzoom and COLORS.toggleOn or COLORS.toggleOff
+customZoomToggleFrame.BackgroundTransparency = ELEMENT_TRANSPARENCY
+customZoomToggleFrame.ZIndex = 11
+customZoomToggleFrame.Parent = settingsMenu
+
+local customZoomToggleCorner = Instance.new("UICorner")
+customZoomToggleCorner.CornerRadius = UDim.new(1, 0)
+customZoomToggleCorner.Parent = customZoomToggleFrame
+
+customZoomToggleKnob = Instance.new("Frame")
+customZoomToggleKnob.Name = "Knob"
+customZoomToggleKnob.Size = UDim2.new(0, 18, 0, 18)
+customZoomToggleKnob.Position = enabled.customzoom
+    and UDim2.new(1, -20, 0, 2)
+    or UDim2.new(0, 2, 0, 2)
+customZoomToggleKnob.BackgroundColor3 = COLORS.white
+customZoomToggleKnob.BackgroundTransparency = 0.05
+customZoomToggleKnob.ZIndex = 12
+customZoomToggleKnob.Parent = customZoomToggleFrame
+
+local customZoomToggleKnobCorner = Instance.new("UICorner")
+customZoomToggleKnobCorner.CornerRadius = UDim.new(1, 0)
+customZoomToggleKnobCorner.Parent = customZoomToggleKnob
+
+customZoomToggleButton = Instance.new("TextButton")
+customZoomToggleButton.Name = "Button"
+customZoomToggleButton.BackgroundTransparency = 1
+customZoomToggleButton.Size = UDim2.new(1, 0, 1, 0)
+customZoomToggleButton.Text = ""
+customZoomToggleButton.ZIndex = 13
+customZoomToggleButton.Parent = customZoomToggleFrame
+
+local function refreshCustomZoomToggle()
+    local on = enabled.customzoom
+    customZoomToggleFrame.BackgroundColor3 = on and COLORS.toggleOn or COLORS.toggleOff
+    TweenService:Create(
+        customZoomToggleKnob,
+        TweenInfo.new(0.15),
+        {
+            Position = on
+                and UDim2.new(1, -20, 0, 2)
+                or UDim2.new(0, 2, 0, 2)
+        }
+    ):Play()
+end
+
+customZoomToggleButton.MouseButton1Click:Connect(function()
+    enabled.customzoom = not enabled.customzoom
+    refreshCustomZoomToggle()
+    persistToggleState("customzoom")
+
+    if enabled.customzoom then
+        -- Re-apply automatically only when the textbox still contains the
+        -- value that was last successfully applied.
+        rememberCustomZoomOriginal()
+
+        local currentValue = tonumber(customZoomBox and customZoomBox.Text or "")
+        if customZoomLastAppliedValue ~= nil
+            and currentValue == customZoomLastAppliedValue then
+            pcall(function()
+                LocalPlayer.CameraMaxZoomDistance = customZoomLastAppliedValue
+            end)
+        else
+            -- The textbox changed while disabled, so Apply Zoom is required.
+        end
+    else
+        restoreCustomMaxZoom()
+    end
+end)
+
+customZoomApplyButton.MouseButton1Click:Connect(function()
+    local value = tonumber(customZoomBox.Text)
+    if not value then
+        customZoomBoxStroke.Color = COLORS.unloadRed
+        customZoomBoxStroke.Transparency = 0
+        return
+    end
+
+    value = math.clamp(value, 0.5, 10000)
+    value = math.floor(value * 10 + 0.5) / 10
+    customZoomBox.Text = tostring(value):gsub("%.0$", "")
+
+    savedPrefs.customMaxZoom = value
+    savePrefs(savedPrefs)
+
+    customZoomBoxStroke.Color = COLORS.white
+    customZoomBoxStroke.Transparency = 0.7
+
+    if enabled.customzoom then
+        applyCustomMaxZoom()
+    end
+
+    pulseColorButton(customZoomApplyStroke, Color3.fromRGB(70, 220, 110), "apply")
+end)
+
+m1ColorToggle = createToggleRow("M1Color", 324, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
 
 m1SwatchExpanded = false
 
 m1ExpandButton = Instance.new("TextButton")
 m1ExpandButton.Name = "M1ColorExpandButton"
-m1ExpandButton.Position = UDim2.new(0, 208, 0, 294)
+m1ExpandButton.Position = UDim2.new(0, 208, 0, 324)
 m1ExpandButton.Size = UDim2.new(0, 22, 0, 22)
 m1ExpandButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ExpandButton.AutoButtonColor = false
@@ -1882,7 +2125,7 @@ m1ExpandButtonCorner.Parent = m1ExpandButton
 m1HexBox = Instance.new("TextBox")
 m1HexBox.Name = "M1ColorHexBox"
 m1HexBox.AnchorPoint = Vector2.new(0, 0)
-m1HexBox.Position = UDim2.new(0, 76, 0, 294)
+m1HexBox.Position = UDim2.new(0, 76, 0, 324)
 m1HexBox.Size = UDim2.new(0, 126, 0, 22)
 m1HexBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1HexBox.BorderSizePixel = 0
@@ -1979,9 +2222,11 @@ end
 
 m1ColorActionButtons = {}
 
+makeColorTooltip(customZoomApplyButton, "Apply Zoom", 90)
+
 m1FavoriteButton = Instance.new("TextButton")
 m1FavoriteButton.Name = "M1ColorFavoriteButton"
-m1FavoriteButton.Position = UDim2.new(0, 20, 0, 294)
+m1FavoriteButton.Position = UDim2.new(0, 20, 0, 324)
 m1FavoriteButton.Size = UDim2.new(0, 22, 0, 22)
 m1FavoriteButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoriteButton.AutoButtonColor = false
@@ -2005,7 +2250,7 @@ table.insert(m1ColorActionButtons, m1FavoriteButton)
 
 m1ApplyButton = Instance.new("TextButton")
 m1ApplyButton.Name = "M1ColorApplyButton"
-m1ApplyButton.Position = UDim2.new(0, 48, 0, 294)
+m1ApplyButton.Position = UDim2.new(0, 48, 0, 324)
 m1ApplyButton.Size = UDim2.new(0, 22, 0, 22)
 m1ApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ApplyButton.AutoButtonColor = false
@@ -2057,7 +2302,7 @@ end
 
 m1FavoritesDropdown = Instance.new("Frame")
 m1FavoritesDropdown.Name = "M1FavoritesDropdown"
-m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 322)
+m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 352)
 m1FavoritesDropdown.Size = UDim2.new(0, 176, 0, 0)
 m1FavoritesDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoritesDropdown.BackgroundTransparency = 0.08
@@ -2723,6 +2968,9 @@ function cleanupScript()
     table.clear(vfxWatchConnections)
     pcall(function()
         stopAntiAFK()
+    end)
+    pcall(function()
+        restoreCustomMaxZoom()
     end)
 
     for _, conn in ipairs(dragConnections) do
