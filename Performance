@@ -19,6 +19,7 @@ enabled = {
     hidetracers = false,
     customzoom = false,
     m1color = false,
+    hideusername = false,
 }
 
 Players = game:GetService("Players")
@@ -2067,7 +2068,7 @@ tooltipCorner.CornerRadius = UDim.new(0, 6)
 tooltipCorner.Parent = tooltip
 gearButton.MouseEnter:Connect(function() tooltip.Visible = true end)
 gearButton.MouseLeave:Connect(function() tooltip.Visible = false end)
-local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 577
+local SETTINGS_WIDTH, SETTINGS_HEIGHT = 300, 587
 
 local STATS_HEIGHT = SETTINGS_HEIGHT
 SETTINGS_GAP = 8
@@ -2111,6 +2112,55 @@ settingsHeaderLabel.TextSize = 15
 settingsHeaderLabel.TextXAlignment = Enum.TextXAlignment.Left
 settingsHeaderLabel.ZIndex = 11
 settingsHeaderLabel.Parent = settingsMenu
+-- Reset Character button (right side of settings header)
+resetCharButton = Instance.new("TextButton")
+resetCharButton.Name = "ResetCharButton"
+resetCharButton.Position = UDim2.new(1, -120, 0, 10)
+resetCharButton.Size = UDim2.new(0, 100, 0, 22)
+resetCharButton.BackgroundColor3 = Color3.fromRGB(200, 30, 30)
+resetCharButton.BackgroundTransparency = 0.1
+resetCharButton.Font = Enum.Font.GothamBold
+resetCharButton.Text = "Reset Character"
+resetCharButton.TextColor3 = Color3.fromRGB(255, 255, 255)
+resetCharButton.TextSize = 12
+resetCharButton.ZIndex = 12
+resetCharButton.Parent = settingsMenu
+local resetCharCorner = Instance.new("UICorner")
+resetCharCorner.CornerRadius = UDim.new(0, 8)
+resetCharCorner.Parent = resetCharButton
+resetCharTooltip = Instance.new("TextLabel")
+resetCharTooltip.Name = "ResetCharTooltip"
+resetCharTooltip.AnchorPoint = Vector2.new(0.5, 1)
+resetCharTooltip.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+resetCharTooltip.BackgroundTransparency = 0.2
+resetCharTooltip.Size = UDim2.new(0, 196, 0, 26)
+resetCharTooltip.Font = Enum.Font.Gotham
+resetCharTooltip.Text = "Instantly kills you, no matter what"
+resetCharTooltip.TextColor3 = COLORS.white
+resetCharTooltip.TextSize = 13
+resetCharTooltip.Visible = false
+resetCharTooltip.ZIndex = 50
+resetCharTooltip.Parent = screenGui
+local resetCharTooltipCorner = Instance.new("UICorner")
+resetCharTooltipCorner.CornerRadius = UDim.new(0, 6)
+resetCharTooltipCorner.Parent = resetCharTooltip
+resetCharButton.MouseEnter:Connect(function()
+    local abs = resetCharButton.AbsolutePosition
+    local size = resetCharButton.AbsoluteSize
+    resetCharTooltip.Position = UDim2.new(
+        0,
+        abs.X + size.X / 2,
+        0,
+        abs.Y + 54
+    )
+    resetCharTooltip.Visible = true
+end)
+resetCharButton.MouseLeave:Connect(function() resetCharTooltip.Visible = false end)
+resetCharButton.MouseButton1Click:Connect(function()
+    local _lp = game.Players.LocalPlayer
+    replicatesignal(game.Players.LocalPlayer.Kill)
+end)
+
 settingsDivider = Instance.new("Frame")
 settingsDivider.Name = "Divider"
 settingsDivider.BackgroundColor3 = COLORS.accent
@@ -2205,7 +2255,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.28"
+versionLabel.Text = "Version 3.31"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -2381,25 +2431,33 @@ function createToggleRow(name, yPos, labelText, stateKey, locked, onToggle)
     toggles[stateKey] = toggleObj
     return toggleObj
 end
-createToggleRow("Ping", 54, "Ping", "ping", false, function() updatePingDisplay() end)
-createToggleRow("Fps", 84, "FPS", "fps", false, function() updateFpsDisplay() end)
-lbToggle = createToggleRow("LbStats", 114, "Leaderboard", "lbstats", lbLocked, function() updateLbDisplay() end)
-sessionKillsToggle = createToggleRow("SessionKills", 144, "Session Kills", "sessionkills", sessionKillsLocked, function() updateSessionKillsDisplay() end)
-executionToggle = createToggleRow("Execution", 174, "Execution", "execution", false, function() updateExecutionDisplay() end)
-playerCountToggle = createToggleRow("PlayerCount", 204, "Players", "playercount", false, function() updatePlayerCountDisplay() end)
-emotesToggle = createToggleRow("Emotes", 234, "Emotes", "emotes", emoteLocked, function() updateEmoteDisplay() end)
-antiAfkToggle = createToggleRow("AntiAFK", 264, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
-playerESPToggle = createToggleRow("PlayerESP", 294, "Player ESP", "playeresp", false, function() applyPlayerESP(enabled.playeresp) end)
+-- "Hide Username" toggle: top of the list, hides display name in the stats menu
+createToggleRow("HideUsername", 54, "Hide Username", "hideusername", false, function()
+    if enabled.hideusername then
+        usernameLabel.Text = "[HIDDEN]"
+    else
+        usernameLabel.Text = getUsername()
+    end
+end)
+createToggleRow("Ping", 84, "Ping", "ping", false, function() updatePingDisplay() end)
+createToggleRow("Fps", 114, "FPS", "fps", false, function() updateFpsDisplay() end)
+lbToggle = createToggleRow("LbStats", 144, "Leaderboard", "lbstats", lbLocked, function() updateLbDisplay() end)
+sessionKillsToggle = createToggleRow("SessionKills", 174, "Session Kills", "sessionkills", sessionKillsLocked, function() updateSessionKillsDisplay() end)
+executionToggle = createToggleRow("Execution", 204, "Execution", "execution", false, function() updateExecutionDisplay() end)
+playerCountToggle = createToggleRow("PlayerCount", 234, "Players", "playercount", false, function() updatePlayerCountDisplay() end)
+emotesToggle = createToggleRow("Emotes", 264, "Emotes", "emotes", emoteLocked, function() updateEmoteDisplay() end)
+antiAfkToggle = createToggleRow("AntiAFK", 294, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
+playerESPToggle = createToggleRow("PlayerESP", 324, "Player ESP", "playeresp", false, function() applyPlayerESP(enabled.playeresp) end)
 -- "Hide Tracers" starts locked; it unlocks only while Player ESP is active.
 -- The preference is intentionally not persisted across sessions.
-hideTracersToggle = createToggleRow("HideTracers", 324, "Hide Tracers", "hidetracers", true, function()
+hideTracersToggle = createToggleRow("HideTracers", 354, "Hide Tracers", "hidetracers", true, function()
     -- No extra logic needed; the RenderStepped loop reads enabled.hidetracers directly.
 end)
 
 customZoomLabel = Instance.new("TextLabel")
 customZoomLabel.Name = "CustomZoomLabel"
 customZoomLabel.BackgroundTransparency = 1
-customZoomLabel.Position = UDim2.new(0, 20, 0, 354)
+customZoomLabel.Position = UDim2.new(0, 20, 0, 384)
 customZoomLabel.Size = UDim2.new(0, 132, 0, 22)
 customZoomLabel.Font = Enum.Font.Gotham
 customZoomLabel.Text = "Custom Max Zoom"
@@ -2411,7 +2469,7 @@ customZoomLabel.Parent = settingsMenu
 
 customZoomApplyButton = Instance.new("TextButton")
 customZoomApplyButton.Name = "CustomZoomApplyButton"
-customZoomApplyButton.Position = UDim2.new(0, 156, 0, 354)
+customZoomApplyButton.Position = UDim2.new(0, 156, 0, 384)
 customZoomApplyButton.Size = UDim2.new(0, 22, 0, 22)
 customZoomApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 customZoomApplyButton.AutoButtonColor = false
@@ -2434,7 +2492,7 @@ customZoomApplyStroke.Parent = customZoomApplyButton
 
 customZoomBox = Instance.new("TextBox")
 customZoomBox.Name = "CustomZoomBox"
-customZoomBox.Position = UDim2.new(0, 184, 0, 354)
+customZoomBox.Position = UDim2.new(0, 184, 0, 384)
 customZoomBox.Size = UDim2.new(0, 48, 0, 22)
 customZoomBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 customZoomBox.BorderSizePixel = 0
@@ -2494,7 +2552,7 @@ end)
 
 customZoomToggleFrame = Instance.new("Frame")
 customZoomToggleFrame.Name = "CustomZoomToggle"
-customZoomToggleFrame.Position = UDim2.new(1, -64, 0, 353)
+customZoomToggleFrame.Position = UDim2.new(1, -64, 0, 383)
 customZoomToggleFrame.Size = UDim2.new(0, 44, 0, 22)
 customZoomToggleFrame.BackgroundColor3 = enabled.customzoom and COLORS.toggleOn or COLORS.toggleOff
 customZoomToggleFrame.BackgroundTransparency = ELEMENT_TRANSPARENCY
@@ -2591,13 +2649,13 @@ customZoomApplyButton.MouseButton1Click:Connect(function()
     pulseColorButton(customZoomApplyStroke, Color3.fromRGB(70, 220, 110), "apply")
 end)
 
-m1ColorToggle = createToggleRow("M1Color", 384, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
+m1ColorToggle = createToggleRow("M1Color", 414, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
 
 m1SwatchExpanded = false
 
 m1ExpandButton = Instance.new("TextButton")
 m1ExpandButton.Name = "M1ColorExpandButton"
-m1ExpandButton.Position = UDim2.new(0, 208, 0, 384)
+m1ExpandButton.Position = UDim2.new(0, 208, 0, 414)
 m1ExpandButton.Size = UDim2.new(0, 22, 0, 22)
 m1ExpandButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ExpandButton.AutoButtonColor = false
@@ -2615,7 +2673,7 @@ m1ExpandButtonCorner.Parent = m1ExpandButton
 m1HexBox = Instance.new("TextBox")
 m1HexBox.Name = "M1ColorHexBox"
 m1HexBox.AnchorPoint = Vector2.new(0, 0)
-m1HexBox.Position = UDim2.new(0, 76, 0, 384)
+m1HexBox.Position = UDim2.new(0, 76, 0, 414)
 m1HexBox.Size = UDim2.new(0, 126, 0, 22)
 m1HexBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1HexBox.BorderSizePixel = 0
@@ -2716,7 +2774,7 @@ makeColorTooltip(customZoomApplyButton, "Apply Zoom", 90)
 
 m1FavoriteButton = Instance.new("TextButton")
 m1FavoriteButton.Name = "M1ColorFavoriteButton"
-m1FavoriteButton.Position = UDim2.new(0, 20, 0, 384)
+m1FavoriteButton.Position = UDim2.new(0, 20, 0, 414)
 m1FavoriteButton.Size = UDim2.new(0, 22, 0, 22)
 m1FavoriteButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoriteButton.AutoButtonColor = false
@@ -2740,7 +2798,7 @@ table.insert(m1ColorActionButtons, m1FavoriteButton)
 
 m1ApplyButton = Instance.new("TextButton")
 m1ApplyButton.Name = "M1ColorApplyButton"
-m1ApplyButton.Position = UDim2.new(0, 48, 0, 384)
+m1ApplyButton.Position = UDim2.new(0, 48, 0, 414)
 m1ApplyButton.Size = UDim2.new(0, 22, 0, 22)
 m1ApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ApplyButton.AutoButtonColor = false
@@ -2792,7 +2850,7 @@ end
 
 m1FavoritesDropdown = Instance.new("Frame")
 m1FavoritesDropdown.Name = "M1FavoritesDropdown"
-m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 412)
+m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 442)
 m1FavoritesDropdown.Size = UDim2.new(0, 176, 0, 0)
 m1FavoritesDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoritesDropdown.BackgroundTransparency = 0.08
@@ -2971,7 +3029,7 @@ applyPlayerESP(enabled.playeresp)
 favoriteHintLabel = Instance.new("TextLabel")
 favoriteHintLabel.Name = "FavoriteHint"
 favoriteHintLabel.BackgroundTransparency = 1
-favoriteHintLabel.Position = UDim2.new(0, 20, 0, 485)
+favoriteHintLabel.Position = UDim2.new(0, 20, 0, 495)
 favoriteHintLabel.Size = UDim2.new(1, -40, 0, 58)
 favoriteHintLabel.Font = Enum.Font.Gotham
 favoriteHintLabel.Text = "Custom colors toggle changes VFX, ultimate bar, skill cooldowns, dash cooldowns, evasive indicators, and your chat messages color. Double-click to remove favorites, there's a maximum of seven."
@@ -2987,7 +3045,7 @@ favoriteHintLabel.Parent = settingsMenu
 -- ── FIX: unload button shifted down 22 px to sit below the disclaimer ────────
 unloadButton = Instance.new("TextButton")
 unloadButton.Name = "UnloadButton"
-unloadButton.Position = UDim2.new(0, 20, 0, 530)
+unloadButton.Position = UDim2.new(0, 20, 0, 540)
 unloadButton.Size = UDim2.new(1, -40, 0, 36)
 unloadButton.BackgroundColor3 = COLORS.unloadRed
 unloadButton.BackgroundTransparency = ELEMENT_TRANSPARENCY
