@@ -10,10 +10,6 @@ enabled = {
     ping = true,
     fps = true,
     lbstats = false,
-    sessionkills = false,
-    execution = true,
-    playercount = true,
-    emotes = false,
     antiafk = false,
     playeresp = false,
     hidetracers = false,
@@ -791,11 +787,7 @@ local function restoreCustomMaxZoom()
     end
 end
 enabled.lbstats = IS_ALLOWED_GAME
-enabled.sessionkills = IS_ALLOWED_GAME
-enabled.emotes = IS_ALLOWED_GAME
 lbLocked = not IS_ALLOWED_GAME
-sessionKillsLocked = not IS_ALLOWED_GAME
-emoteLocked = not IS_ALLOWED_GAME
 m1ColorLocked = not IS_ALLOWED_GAME
 dragLocked = false
 -- Forward declaration; assigned when the UI is built below.
@@ -2223,10 +2215,33 @@ dividerCorner = Instance.new("UICorner")
 dividerCorner.CornerRadius = UDim.new(1, 0)
 dividerCorner.Parent = divider
 
+-- UNIVERSAL sub-header
+local statsUniversalHeader = Instance.new("TextLabel")
+statsUniversalHeader.Name = "UniversalHeader"
+statsUniversalHeader.BackgroundTransparency = 1
+statsUniversalHeader.Position = UDim2.new(0, 20, 0, 47)
+statsUniversalHeader.Size = UDim2.new(1, -40, 0, 14)
+statsUniversalHeader.Font = Enum.Font.GothamBold
+statsUniversalHeader.Text = "UNIVERSAL"
+statsUniversalHeader.TextColor3 = COLORS.accent
+statsUniversalHeader.TextSize = 12
+statsUniversalHeader.TextXAlignment = Enum.TextXAlignment.Left
+statsUniversalHeader.ZIndex = 11
+statsUniversalHeader.Parent = statsMenu
+local statsUniversalUnderline = Instance.new("Frame")
+statsUniversalUnderline.Name = "UniversalHeaderUnderline"
+statsUniversalUnderline.BackgroundColor3 = COLORS.accent
+statsUniversalUnderline.BackgroundTransparency = 0
+statsUniversalUnderline.BorderSizePixel = 0
+statsUniversalUnderline.Position = UDim2.new(0, 20, 0, 62)
+statsUniversalUnderline.Size = UDim2.new(0, 80, 0, 1)
+statsUniversalUnderline.ZIndex = 11
+statsUniversalUnderline.Parent = statsMenu
+
 stopwatchLabel = Instance.new("TextLabel")
 stopwatchLabel.Name = "SessionStopwatch"
 stopwatchLabel.BackgroundTransparency = 1
-stopwatchLabel.Position = UDim2.new(0, 20, 0, 54)
+stopwatchLabel.Position = UDim2.new(0, 20, 0, 67)
 stopwatchLabel.Size = UDim2.new(1, -40, 0, 22)
 stopwatchLabel.Font = Enum.Font.Gotham
 stopwatchLabel.Text = "Session Time: 0:00:00:00"
@@ -2235,6 +2250,258 @@ stopwatchLabel.TextSize = 16
 stopwatchLabel.TextXAlignment = Enum.TextXAlignment.Left
 stopwatchLabel.ZIndex = 11
 stopwatchLabel.Parent = statsMenu
+
+executionLabel = Instance.new("TextLabel")
+executionLabel.Name = "ExecutionCount"
+executionLabel.BackgroundTransparency = 1
+executionLabel.Position = UDim2.new(0, 20, 0, 97)
+executionLabel.Size = UDim2.new(1, -40, 0, 24)
+executionLabel.Font = Enum.Font.Gotham
+executionLabel.Text = "Times Executed: " .. formatNumberWithCommas(executionCount)
+executionLabel.TextColor3 = COLORS.white
+executionLabel.TextSize = 16
+executionLabel.TextXAlignment = Enum.TextXAlignment.Left
+executionLabel.ZIndex = 11
+executionLabel.Parent = statsMenu
+
+playerCountLabel = Instance.new("TextLabel")
+playerCountLabel.Name = "PlayerCount"
+playerCountLabel.BackgroundTransparency = 1
+playerCountLabel.Position = UDim2.new(0, 20, 0, 127)
+playerCountLabel.Size = UDim2.new(1, -40, 0, 24)
+playerCountLabel.Font = Enum.Font.Gotham
+playerCountLabel.Text = "Players: --"
+playerCountLabel.TextColor3 = COLORS.white
+playerCountLabel.TextSize = 16
+playerCountLabel.TextXAlignment = Enum.TextXAlignment.Left
+playerCountLabel.ZIndex = 11
+playerCountLabel.Parent = statsMenu
+
+-- TSB ONLY sub-header
+local statsTSBOnlyHeader = Instance.new("TextLabel")
+statsTSBOnlyHeader.Name = "TSBOnlyHeader"
+statsTSBOnlyHeader.BackgroundTransparency = 1
+statsTSBOnlyHeader.Position = UDim2.new(0, 20, 0, 161)
+statsTSBOnlyHeader.Size = UDim2.new(1, -40, 0, 14)
+statsTSBOnlyHeader.Font = Enum.Font.GothamBold
+statsTSBOnlyHeader.Text = "TSB ONLY"
+statsTSBOnlyHeader.TextColor3 = COLORS.accent
+statsTSBOnlyHeader.TextSize = 12
+statsTSBOnlyHeader.TextXAlignment = Enum.TextXAlignment.Left
+statsTSBOnlyHeader.ZIndex = 11
+statsTSBOnlyHeader.Parent = statsMenu
+local statsTSBOnlyUnderline = Instance.new("Frame")
+statsTSBOnlyUnderline.Name = "TSBOnlyHeaderUnderline"
+statsTSBOnlyUnderline.BackgroundColor3 = COLORS.accent
+statsTSBOnlyUnderline.BackgroundTransparency = 0
+statsTSBOnlyUnderline.BorderSizePixel = 0
+statsTSBOnlyUnderline.Position = UDim2.new(0, 20, 0, 176)
+statsTSBOnlyUnderline.Size = UDim2.new(0, 68, 0, 1)
+statsTSBOnlyUnderline.ZIndex = 11
+statsTSBOnlyUnderline.Parent = statsMenu
+
+sessionKillsLabel = Instance.new("TextLabel")
+sessionKillsLabel.Name = "SessionKills"
+sessionKillsLabel.BackgroundTransparency = 1
+sessionKillsLabel.Position = UDim2.new(0, 20, 0, 181)
+sessionKillsLabel.Size = UDim2.new(1, -40, 0, 24)
+sessionKillsLabel.Font = Enum.Font.Gotham
+sessionKillsLabel.Text = "Session Kills: --"
+sessionKillsLabel.TextColor3 = COLORS.white
+sessionKillsLabel.TextSize = 16
+sessionKillsLabel.TextXAlignment = Enum.TextXAlignment.Left
+sessionKillsLabel.ZIndex = 11
+sessionKillsLabel.Parent = statsMenu
+
+khrLabel = Instance.new("TextLabel")
+khrLabel.Name = "KillsPerHour"
+khrLabel.BackgroundTransparency = 1
+khrLabel.Position = UDim2.new(0, 20, 0, 211)
+khrLabel.Size = UDim2.new(1, -40, 0, 24)
+khrLabel.Font = Enum.Font.Gotham
+khrLabel.Text = "K/HR: --"
+khrLabel.TextColor3 = COLORS.white
+khrLabel.TextSize = 16
+khrLabel.TextXAlignment = Enum.TextXAlignment.Left
+khrLabel.ZIndex = 11
+khrLabel.Parent = statsMenu
+
+nextEmoteLabel = Instance.new("TextLabel")
+nextEmoteLabel.Name = "NextEmote"
+nextEmoteLabel.BackgroundTransparency = 1
+nextEmoteLabel.Position = UDim2.new(0, 20, 0, 241)
+nextEmoteLabel.Size = UDim2.new(1, -40, 0, 24)
+nextEmoteLabel.Font = Enum.Font.Gotham
+nextEmoteLabel.Text = "Next Emote: --"
+nextEmoteLabel.TextColor3 = COLORS.white
+nextEmoteLabel.TextSize = 16
+nextEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
+nextEmoteLabel.ZIndex = 11
+nextEmoteLabel.Parent = statsMenu
+
+emotesOwnedLabel = Instance.new("TextLabel")
+emotesOwnedLabel.Name = "EmotesOwned"
+emotesOwnedLabel.BackgroundTransparency = 1
+emotesOwnedLabel.Position = UDim2.new(0, 20, 0, 271)
+emotesOwnedLabel.Size = UDim2.new(0, 130, 0, 24)
+emotesOwnedLabel.Font = Enum.Font.Gotham
+emotesOwnedLabel.Text = "Emotes: --/--"
+emotesOwnedLabel.TextColor3 = COLORS.white
+emotesOwnedLabel.TextSize = 16
+emotesOwnedLabel.TextXAlignment = Enum.TextXAlignment.Left
+emotesOwnedLabel.ZIndex = 11
+emotesOwnedLabel.Parent = statsMenu
+
+emotesDisclaimerLabel = Instance.new("TextLabel")
+emotesDisclaimerLabel.Name = "EmotesDisclaimer"
+emotesDisclaimerLabel.BackgroundTransparency = 1
+emotesDisclaimerLabel.Position = UDim2.new(0, 140, 0, 275)
+emotesDisclaimerLabel.Size = UDim2.new(1, -178, 0, 16)
+emotesDisclaimerLabel.Font = Enum.Font.Gotham
+emotesDisclaimerLabel.Text = "(Excludes Limiteds)"
+emotesDisclaimerLabel.TextColor3 = COLORS.disabledGray
+emotesDisclaimerLabel.TextSize = 10
+emotesDisclaimerLabel.TextXAlignment = Enum.TextXAlignment.Left
+emotesDisclaimerLabel.TextWrapped = true
+emotesDisclaimerLabel.ZIndex = 11
+emotesDisclaimerLabel.Parent = statsMenu
+
+lastEmoteLabel = Instance.new("TextLabel")
+lastEmoteLabel.Name = "LastEmote"
+lastEmoteLabel.BackgroundTransparency = 1
+lastEmoteLabel.Position = UDim2.new(0, 20, 0, 301)
+lastEmoteLabel.Size = UDim2.new(1, -40, 0, 40)
+lastEmoteLabel.Font = Enum.Font.Gotham
+lastEmoteLabel.Text = "Last Emote: --"
+lastEmoteLabel.TextColor3 = COLORS.white
+lastEmoteLabel.TextSize = 16
+lastEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
+lastEmoteLabel.TextYAlignment = Enum.TextYAlignment.Top
+lastEmoteLabel.TextWrapped = true
+lastEmoteLabel.ZIndex = 11
+lastEmoteLabel.Parent = statsMenu
+
+awakeningLabel = Instance.new("TextLabel")
+awakeningLabel.Name = "Awakening"
+awakeningLabel.BackgroundTransparency = 1
+awakeningLabel.Position = UDim2.new(0, 20, 0, 324)
+awakeningLabel.Size = UDim2.new(1, -40, 0, 24)
+awakeningLabel.Font = Enum.Font.Gotham
+awakeningLabel.Text = "Awakening: --%"
+awakeningLabel.TextColor3 = COLORS.white
+awakeningLabel.TextSize = 16
+awakeningLabel.TextXAlignment = Enum.TextXAlignment.Left
+awakeningLabel.ZIndex = 11
+awakeningLabel.Parent = statsMenu
+
+-- LATENCY GRAPH header
+local latencyGraphHeader = Instance.new("TextLabel")
+latencyGraphHeader.Name = "LatencyGraphHeader"
+latencyGraphHeader.BackgroundTransparency = 1
+latencyGraphHeader.Position = UDim2.new(0, 20, 0, 358)
+latencyGraphHeader.Size = UDim2.new(1, -40, 0, 14)
+latencyGraphHeader.Font = Enum.Font.GothamBold
+latencyGraphHeader.Text = "LATENCY GRAPH"
+latencyGraphHeader.TextColor3 = COLORS.accent
+latencyGraphHeader.TextSize = 12
+latencyGraphHeader.TextXAlignment = Enum.TextXAlignment.Left
+latencyGraphHeader.ZIndex = 11
+latencyGraphHeader.Parent = statsMenu
+local latencyGraphUnderline = Instance.new("Frame")
+latencyGraphUnderline.Name = "LatencyGraphUnderline"
+latencyGraphUnderline.BackgroundColor3 = COLORS.accent
+latencyGraphUnderline.BackgroundTransparency = 0
+latencyGraphUnderline.BorderSizePixel = 0
+latencyGraphUnderline.Position = UDim2.new(0, 20, 0, 373)
+latencyGraphUnderline.Size = UDim2.new(0, 108, 0, 1)
+latencyGraphUnderline.ZIndex = 11
+latencyGraphUnderline.Parent = statsMenu
+
+-- Graph container
+local GRAPH_X       = 20
+local GRAPH_Y       = 378
+local GRAPH_W       = 260
+local GRAPH_H       = 160
+local GRAPH_SAMPLES = 60
+
+local pingGraphFrame = Instance.new("Frame")
+pingGraphFrame.Name = "PingGraph"
+pingGraphFrame.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
+pingGraphFrame.BackgroundTransparency = 0.55
+pingGraphFrame.BorderSizePixel = 0
+pingGraphFrame.Position = UDim2.new(0, GRAPH_X, 0, GRAPH_Y)
+pingGraphFrame.Size = UDim2.new(0, GRAPH_W, 0, GRAPH_H)
+pingGraphFrame.ClipsDescendants = true
+pingGraphFrame.ZIndex = 11
+pingGraphFrame.Parent = statsMenu
+local pingGraphCorner = Instance.new("UICorner")
+pingGraphCorner.CornerRadius = UDim.new(0, 6)
+pingGraphCorner.Parent = pingGraphFrame
+local pingGraphStroke = Instance.new("UIStroke")
+pingGraphStroke.Color = COLORS.accent
+pingGraphStroke.Thickness = 1
+pingGraphStroke.Transparency = 0.5
+pingGraphStroke.Parent = pingGraphFrame
+
+-- Y-axis gridlines at 50 ms, 100 ms, 150 ms
+for _, gridPing in ipairs({50, 100, 150}) do
+    local gridLine = Instance.new("Frame")
+    gridLine.BackgroundColor3 = COLORS.white
+    gridLine.BackgroundTransparency = 0.85
+    gridLine.BorderSizePixel = 0
+    gridLine.ZIndex = 12
+    gridLine.Parent = pingGraphFrame
+    -- y=0 at top of frame maps to high ping; clamp ceiling at 200 ms
+    local frac = 1 - (gridPing / 200)
+    gridLine.Position = UDim2.new(0, 0, frac, 0)
+    gridLine.Size    = UDim2.new(1, 0, 0, 1)
+    local gridLabel = Instance.new("TextLabel")
+    gridLabel.BackgroundTransparency = 1
+    gridLabel.Position = UDim2.new(0, 2, frac, -10)
+    gridLabel.Size = UDim2.new(0, 36, 0, 12)
+    gridLabel.Font = Enum.Font.Gotham
+    gridLabel.Text = tostring(gridPing) .. "ms"
+    gridLabel.TextColor3 = COLORS.white
+    gridLabel.TextTransparency = 0.45
+    gridLabel.TextSize = 9
+    gridLabel.TextXAlignment = Enum.TextXAlignment.Left
+    gridLabel.ZIndex = 13
+    gridLabel.Parent = pingGraphFrame
+end
+
+-- One bar per sample slot
+pingGraphBars = {}
+local barW = GRAPH_W / GRAPH_SAMPLES
+for i = 1, GRAPH_SAMPLES do
+    local bar = Instance.new("Frame")
+    bar.Name = "Bar" .. i
+    bar.BackgroundColor3 = COLORS.accent
+    bar.BackgroundTransparency = 0.3
+    bar.BorderSizePixel = 0
+    bar.Position = UDim2.new(0, (i - 1) * barW, 1, 0)
+    bar.Size     = UDim2.new(0, math.max(1, barW - 1), 0, 0)
+    bar.AnchorPoint = Vector2.new(0, 1)
+    bar.ZIndex = 12
+    bar.Parent = pingGraphFrame
+    pingGraphBars[i] = bar
+end
+
+-- Line overlay drawn as thin 1-px-tall frames connecting bar tops
+pingGraphLineSegs = {}
+for i = 1, GRAPH_SAMPLES - 1 do
+    local seg = Instance.new("Frame")
+    seg.Name = "Seg" .. i
+    seg.BackgroundColor3 = COLORS.white
+    seg.BackgroundTransparency = 0.2
+    seg.BorderSizePixel = 0
+    seg.ZIndex = 13
+    seg.Parent = pingGraphFrame
+    pingGraphLineSegs[i] = seg
+end
+
+pingHistory = {}
+for i = 1, GRAPH_SAMPLES do pingHistory[i] = 0 end
+
 usernameLabel = Instance.new("TextLabel")
 usernameLabel.Name = "Username"
 usernameLabel.BackgroundTransparency = 1
@@ -2255,115 +2522,12 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.31"
+versionLabel.Text = "Version 3.34"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
 versionLabel.ZIndex = 11
 versionLabel.Parent = statsMenu
-
-sessionKillsLabel = Instance.new("TextLabel")
-sessionKillsLabel.Name = "SessionKills"
-sessionKillsLabel.BackgroundTransparency = 1
-sessionKillsLabel.Position = UDim2.new(0, 20, 0, 84)
-sessionKillsLabel.Size = UDim2.new(1, -40, 0, 24)
-sessionKillsLabel.Font = Enum.Font.Gotham
-sessionKillsLabel.Text = "Session Kills: --"
-sessionKillsLabel.TextColor3 = COLORS.white
-sessionKillsLabel.TextSize = 16
-sessionKillsLabel.TextXAlignment = Enum.TextXAlignment.Left
-sessionKillsLabel.ZIndex = 11
-sessionKillsLabel.Parent = statsMenu
-khrLabel = Instance.new("TextLabel")
-khrLabel.Name = "KillsPerHour"
-khrLabel.BackgroundTransparency = 1
-khrLabel.Position = UDim2.new(0, 20, 0, 114)
-khrLabel.Size = UDim2.new(1, -40, 0, 24)
-khrLabel.Font = Enum.Font.Gotham
-khrLabel.Text = "K/HR: --"
-khrLabel.TextColor3 = COLORS.white
-khrLabel.TextSize = 16
-khrLabel.TextXAlignment = Enum.TextXAlignment.Left
-khrLabel.ZIndex = 11
-khrLabel.Parent = statsMenu
-executionLabel = Instance.new("TextLabel")
-executionLabel.Name = "ExecutionCount"
-executionLabel.BackgroundTransparency = 1
-executionLabel.Position = UDim2.new(0, 20, 0, 144)
-executionLabel.Size = UDim2.new(1, -40, 0, 24)
-executionLabel.Font = Enum.Font.Gotham
-executionLabel.Text = "Times Executed: " .. formatNumberWithCommas(executionCount)
-executionLabel.TextColor3 = COLORS.white
-executionLabel.TextSize = 16
-executionLabel.TextXAlignment = Enum.TextXAlignment.Left
-executionLabel.ZIndex = 11
-executionLabel.Parent = statsMenu
-playerCountLabel = Instance.new("TextLabel")
-playerCountLabel.Name = "PlayerCount"
-playerCountLabel.BackgroundTransparency = 1
-playerCountLabel.Position = UDim2.new(0, 20, 0, 174)
-playerCountLabel.Size = UDim2.new(1, -40, 0, 24)
-playerCountLabel.Font = Enum.Font.Gotham
-playerCountLabel.Text = "Players: --"
-playerCountLabel.TextColor3 = COLORS.white
-playerCountLabel.TextSize = 16
-playerCountLabel.TextXAlignment = Enum.TextXAlignment.Left
-playerCountLabel.ZIndex = 11
-playerCountLabel.Parent = statsMenu
-nextEmoteLabel = Instance.new("TextLabel")
-nextEmoteLabel.Name = "NextEmote"
-nextEmoteLabel.BackgroundTransparency = 1
-nextEmoteLabel.Position = UDim2.new(0, 20, 0, 204)
-nextEmoteLabel.Size = UDim2.new(1, -40, 0, 24)
-nextEmoteLabel.Font = Enum.Font.Gotham
-nextEmoteLabel.Text = "Next Emote: --"
-nextEmoteLabel.TextColor3 = COLORS.white
-nextEmoteLabel.TextSize = 16
-nextEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
-nextEmoteLabel.ZIndex = 11
-nextEmoteLabel.Parent = statsMenu
-
-emotesOwnedLabel = Instance.new("TextLabel")
-emotesOwnedLabel.Name = "EmotesOwned"
-emotesOwnedLabel.BackgroundTransparency = 1
-emotesOwnedLabel.Position = UDim2.new(0, 20, 0, 234)
-emotesOwnedLabel.Size = UDim2.new(0, 130, 0, 24)
-emotesOwnedLabel.Font = Enum.Font.Gotham
-emotesOwnedLabel.Text = "Emotes: --/--"
-emotesOwnedLabel.TextColor3 = COLORS.white
-emotesOwnedLabel.TextSize = 16
-emotesOwnedLabel.TextXAlignment = Enum.TextXAlignment.Left
-emotesOwnedLabel.ZIndex = 11
-emotesOwnedLabel.Parent = statsMenu
-
-emotesDisclaimerLabel = Instance.new("TextLabel")
-emotesDisclaimerLabel.Name = "EmotesDisclaimer"
-emotesDisclaimerLabel.BackgroundTransparency = 1
-emotesDisclaimerLabel.Position = UDim2.new(0, 140, 0, 238)
-emotesDisclaimerLabel.Size = UDim2.new(1, -178, 0, 16)
-emotesDisclaimerLabel.Font = Enum.Font.Gotham
-emotesDisclaimerLabel.Text = "(Excludes Limiteds)"
-emotesDisclaimerLabel.TextColor3 = COLORS.disabledGray
-emotesDisclaimerLabel.TextSize = 10
-emotesDisclaimerLabel.TextXAlignment = Enum.TextXAlignment.Left
-emotesDisclaimerLabel.TextWrapped = true
-emotesDisclaimerLabel.ZIndex = 11
-emotesDisclaimerLabel.Parent = statsMenu
-
-lastEmoteLabel = Instance.new("TextLabel")
-lastEmoteLabel.Name = "LastEmote"
-lastEmoteLabel.BackgroundTransparency = 1
-lastEmoteLabel.Position = UDim2.new(0, 20, 0, 264)
-lastEmoteLabel.Size = UDim2.new(1, -40, 0, 40)
-lastEmoteLabel.Font = Enum.Font.Gotham
-lastEmoteLabel.Text = "Last Emote: --"
-lastEmoteLabel.TextColor3 = COLORS.white
-lastEmoteLabel.TextSize = 16
-lastEmoteLabel.TextXAlignment = Enum.TextXAlignment.Left
-lastEmoteLabel.TextYAlignment = Enum.TextYAlignment.Top
-lastEmoteLabel.TextWrapped = true
-lastEmoteLabel.ZIndex = 11
-lastEmoteLabel.Parent = statsMenu
 
 toggles = {}
 function createToggleRow(name, yPos, labelText, stateKey, locked, onToggle)
@@ -2431,33 +2595,51 @@ function createToggleRow(name, yPos, labelText, stateKey, locked, onToggle)
     toggles[stateKey] = toggleObj
     return toggleObj
 end
--- "Hide Username" toggle: top of the list, hides display name in the stats menu
-createToggleRow("HideUsername", 54, "Hide Username", "hideusername", false, function()
+-- "UNIVERSAL" sub-header between the purple divider and Hide Username
+local universalHeader = Instance.new("TextLabel")
+universalHeader.Name = "UniversalHeader"
+universalHeader.BackgroundTransparency = 1
+universalHeader.Position = UDim2.new(0, 20, 0, 47)
+universalHeader.Size = UDim2.new(1, -40, 0, 14)
+universalHeader.Font = Enum.Font.GothamBold
+universalHeader.Text = "UNIVERSAL"
+universalHeader.TextColor3 = COLORS.accent
+universalHeader.TextSize = 12
+universalHeader.TextXAlignment = Enum.TextXAlignment.Left
+universalHeader.ZIndex = 11
+universalHeader.Parent = settingsMenu
+local universalHeaderUnderline = Instance.new("Frame")
+universalHeaderUnderline.Name = "UniversalHeaderUnderline"
+universalHeaderUnderline.BackgroundColor3 = COLORS.accent
+universalHeaderUnderline.BackgroundTransparency = 0
+universalHeaderUnderline.BorderSizePixel = 0
+universalHeaderUnderline.Position = UDim2.new(0, 20, 0, 62)
+universalHeaderUnderline.Size = UDim2.new(0, 80, 0, 1)
+universalHeaderUnderline.ZIndex = 11
+universalHeaderUnderline.Parent = settingsMenu
+
+-- "Hide Username" toggle: hides display name in the stats menu
+createToggleRow("HideUsername", 64, "Hide Username", "hideusername", false, function()
     if enabled.hideusername then
         usernameLabel.Text = "[HIDDEN]"
     else
         usernameLabel.Text = getUsername()
     end
 end)
-createToggleRow("Ping", 84, "Ping", "ping", false, function() updatePingDisplay() end)
-createToggleRow("Fps", 114, "FPS", "fps", false, function() updateFpsDisplay() end)
-lbToggle = createToggleRow("LbStats", 144, "Leaderboard", "lbstats", lbLocked, function() updateLbDisplay() end)
-sessionKillsToggle = createToggleRow("SessionKills", 174, "Session Kills", "sessionkills", sessionKillsLocked, function() updateSessionKillsDisplay() end)
-executionToggle = createToggleRow("Execution", 204, "Execution", "execution", false, function() updateExecutionDisplay() end)
-playerCountToggle = createToggleRow("PlayerCount", 234, "Players", "playercount", false, function() updatePlayerCountDisplay() end)
-emotesToggle = createToggleRow("Emotes", 264, "Emotes", "emotes", emoteLocked, function() updateEmoteDisplay() end)
-antiAfkToggle = createToggleRow("AntiAFK", 294, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
-playerESPToggle = createToggleRow("PlayerESP", 324, "Player ESP", "playeresp", false, function() applyPlayerESP(enabled.playeresp) end)
+createToggleRow("Ping", 94, "Ping", "ping", false, function() updatePingDisplay() end)
+createToggleRow("Fps", 124, "FPS", "fps", false, function() updateFpsDisplay() end)
+playerESPToggle = createToggleRow("PlayerESP", 154, "Player ESP", "playeresp", false, function() applyPlayerESP(enabled.playeresp) end)
 -- "Hide Tracers" starts locked; it unlocks only while Player ESP is active.
 -- The preference is intentionally not persisted across sessions.
-hideTracersToggle = createToggleRow("HideTracers", 354, "Hide Tracers", "hidetracers", true, function()
+hideTracersToggle = createToggleRow("HideTracers", 184, "Hide Tracers", "hidetracers", true, function()
     -- No extra logic needed; the RenderStepped loop reads enabled.hidetracers directly.
 end)
+antiAfkToggle = createToggleRow("AntiAFK", 214, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
 
 customZoomLabel = Instance.new("TextLabel")
 customZoomLabel.Name = "CustomZoomLabel"
 customZoomLabel.BackgroundTransparency = 1
-customZoomLabel.Position = UDim2.new(0, 20, 0, 384)
+customZoomLabel.Position = UDim2.new(0, 20, 0, 244)
 customZoomLabel.Size = UDim2.new(0, 132, 0, 22)
 customZoomLabel.Font = Enum.Font.Gotham
 customZoomLabel.Text = "Custom Max Zoom"
@@ -2469,7 +2651,7 @@ customZoomLabel.Parent = settingsMenu
 
 customZoomApplyButton = Instance.new("TextButton")
 customZoomApplyButton.Name = "CustomZoomApplyButton"
-customZoomApplyButton.Position = UDim2.new(0, 156, 0, 384)
+customZoomApplyButton.Position = UDim2.new(0, 156, 0, 244)
 customZoomApplyButton.Size = UDim2.new(0, 22, 0, 22)
 customZoomApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 customZoomApplyButton.AutoButtonColor = false
@@ -2492,7 +2674,7 @@ customZoomApplyStroke.Parent = customZoomApplyButton
 
 customZoomBox = Instance.new("TextBox")
 customZoomBox.Name = "CustomZoomBox"
-customZoomBox.Position = UDim2.new(0, 184, 0, 384)
+customZoomBox.Position = UDim2.new(0, 184, 0, 244)
 customZoomBox.Size = UDim2.new(0, 48, 0, 22)
 customZoomBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 customZoomBox.BorderSizePixel = 0
@@ -2552,7 +2734,7 @@ end)
 
 customZoomToggleFrame = Instance.new("Frame")
 customZoomToggleFrame.Name = "CustomZoomToggle"
-customZoomToggleFrame.Position = UDim2.new(1, -64, 0, 383)
+customZoomToggleFrame.Position = UDim2.new(1, -64, 0, 243)
 customZoomToggleFrame.Size = UDim2.new(0, 44, 0, 22)
 customZoomToggleFrame.BackgroundColor3 = enabled.customzoom and COLORS.toggleOn or COLORS.toggleOff
 customZoomToggleFrame.BackgroundTransparency = ELEMENT_TRANSPARENCY
@@ -2649,13 +2831,37 @@ customZoomApplyButton.MouseButton1Click:Connect(function()
     pulseColorButton(customZoomApplyStroke, Color3.fromRGB(70, 220, 110), "apply")
 end)
 
-m1ColorToggle = createToggleRow("M1Color", 414, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
+-- "TSB ONLY" sub-header below Custom Max Zoom
+local tsbOnlyHeader = Instance.new("TextLabel")
+tsbOnlyHeader.Name = "TSBOnlyHeader"
+tsbOnlyHeader.BackgroundTransparency = 1
+tsbOnlyHeader.Position = UDim2.new(0, 20, 0, 274)
+tsbOnlyHeader.Size = UDim2.new(1, -40, 0, 14)
+tsbOnlyHeader.Font = Enum.Font.GothamBold
+tsbOnlyHeader.Text = "TSB ONLY"
+tsbOnlyHeader.TextColor3 = COLORS.accent
+tsbOnlyHeader.TextSize = 12
+tsbOnlyHeader.TextXAlignment = Enum.TextXAlignment.Left
+tsbOnlyHeader.ZIndex = 11
+tsbOnlyHeader.Parent = settingsMenu
+local tsbOnlyHeaderUnderline = Instance.new("Frame")
+tsbOnlyHeaderUnderline.Name = "TSBOnlyHeaderUnderline"
+tsbOnlyHeaderUnderline.BackgroundColor3 = COLORS.accent
+tsbOnlyHeaderUnderline.BackgroundTransparency = 0
+tsbOnlyHeaderUnderline.BorderSizePixel = 0
+tsbOnlyHeaderUnderline.Position = UDim2.new(0, 20, 0, 289)
+tsbOnlyHeaderUnderline.Size = UDim2.new(0, 68, 0, 1)
+tsbOnlyHeaderUnderline.ZIndex = 11
+tsbOnlyHeaderUnderline.Parent = settingsMenu
+
+lbToggle = createToggleRow("LbStats", 292, "Leaderboard", "lbstats", lbLocked, function() updateLbDisplay() end)
+m1ColorToggle = createToggleRow("M1Color", 322, "Custom Colors*", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
 
 m1SwatchExpanded = false
 
 m1ExpandButton = Instance.new("TextButton")
 m1ExpandButton.Name = "M1ColorExpandButton"
-m1ExpandButton.Position = UDim2.new(0, 208, 0, 414)
+m1ExpandButton.Position = UDim2.new(0, 208, 0, 322)
 m1ExpandButton.Size = UDim2.new(0, 22, 0, 22)
 m1ExpandButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ExpandButton.AutoButtonColor = false
@@ -2673,7 +2879,7 @@ m1ExpandButtonCorner.Parent = m1ExpandButton
 m1HexBox = Instance.new("TextBox")
 m1HexBox.Name = "M1ColorHexBox"
 m1HexBox.AnchorPoint = Vector2.new(0, 0)
-m1HexBox.Position = UDim2.new(0, 76, 0, 414)
+m1HexBox.Position = UDim2.new(0, 76, 0, 322)
 m1HexBox.Size = UDim2.new(0, 126, 0, 22)
 m1HexBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1HexBox.BorderSizePixel = 0
@@ -2774,7 +2980,7 @@ makeColorTooltip(customZoomApplyButton, "Apply Zoom", 90)
 
 m1FavoriteButton = Instance.new("TextButton")
 m1FavoriteButton.Name = "M1ColorFavoriteButton"
-m1FavoriteButton.Position = UDim2.new(0, 20, 0, 414)
+m1FavoriteButton.Position = UDim2.new(0, 20, 0, 322)
 m1FavoriteButton.Size = UDim2.new(0, 22, 0, 22)
 m1FavoriteButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoriteButton.AutoButtonColor = false
@@ -2798,7 +3004,7 @@ table.insert(m1ColorActionButtons, m1FavoriteButton)
 
 m1ApplyButton = Instance.new("TextButton")
 m1ApplyButton.Name = "M1ColorApplyButton"
-m1ApplyButton.Position = UDim2.new(0, 48, 0, 414)
+m1ApplyButton.Position = UDim2.new(0, 48, 0, 322)
 m1ApplyButton.Size = UDim2.new(0, 22, 0, 22)
 m1ApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ApplyButton.AutoButtonColor = false
@@ -2850,7 +3056,7 @@ end
 
 m1FavoritesDropdown = Instance.new("Frame")
 m1FavoritesDropdown.Name = "M1FavoritesDropdown"
-m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 442)
+m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 350)
 m1FavoritesDropdown.Size = UDim2.new(0, 176, 0, 0)
 m1FavoritesDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoritesDropdown.BackgroundTransparency = 0.08
@@ -3029,17 +3235,18 @@ applyPlayerESP(enabled.playeresp)
 favoriteHintLabel = Instance.new("TextLabel")
 favoriteHintLabel.Name = "FavoriteHint"
 favoriteHintLabel.BackgroundTransparency = 1
-favoriteHintLabel.Position = UDim2.new(0, 20, 0, 495)
+favoriteHintLabel.Position = UDim2.new(0, 20, 0, 470)
 favoriteHintLabel.Size = UDim2.new(1, -40, 0, 58)
 favoriteHintLabel.Font = Enum.Font.Gotham
-favoriteHintLabel.Text = "Custom colors toggle changes VFX, ultimate bar, skill cooldowns, dash cooldowns, evasive indicators, and your chat messages color. Double-click to remove favorites, there's a maximum of seven."
+favoriteHintLabel.Text = "*Custom colors toggle changes VFX, ultimate bar, skill cooldowns, dash cooldowns, evasive indicators, and your chat messages color. Double-click to remove favorites, there's a maximum of seven."
 favoriteHintLabel.TextColor3 = COLORS.disabledGray
-favoriteHintLabel.TextSize = 9
+favoriteHintLabel.TextSize = 13
 favoriteHintLabel.TextWrapped = true
 favoriteHintLabel.TextXAlignment = Enum.TextXAlignment.Left
 favoriteHintLabel.TextYAlignment = Enum.TextYAlignment.Top
 favoriteHintLabel.Visible = IS_ALLOWED_GAME
 favoriteHintLabel.ZIndex = 11
+favoriteHintLabel.Size = UDim2.new(1, -40, 0, 88)
 favoriteHintLabel.Parent = settingsMenu
 
 -- ── FIX: unload button shifted down 22 px to sit below the disclaimer ────────
@@ -3218,6 +3425,53 @@ function updateFpsDisplay()
         fpsValue.TextColor3 = COLORS.disabledGray
     end
 end
+function updatePingGraph()
+    local ping = getPing()
+    -- Shift history left, append latest sample
+    table.remove(pingHistory, 1)
+    table.insert(pingHistory, ping)
+
+    local CEIL = 200  -- ms ceiling for graph scaling
+    local barW = GRAPH_W / GRAPH_SAMPLES
+
+    -- Compute bar heights and colours, cache y-fractions for line segments
+    local yFracs = {}
+    for i = 1, GRAPH_SAMPLES do
+        local p = pingHistory[i]
+        local frac = math.min(p / CEIL, 1)
+        yFracs[i] = frac
+        local bar = pingGraphBars[i]
+        bar.Size     = UDim2.new(0, math.max(1, barW - 1), frac, 0)
+        bar.Position = UDim2.new(0, (i - 1) * barW, 1, 0)
+        bar.BackgroundColor3 = getPingColor(p)
+        bar.BackgroundTransparency = p == 0 and 1 or 0.55
+    end
+
+    -- Update line segments connecting adjacent bar tops
+    for i = 1, GRAPH_SAMPLES - 1 do
+        local seg = pingGraphLineSegs[i]
+        local f1 = yFracs[i]
+        local f2 = yFracs[i + 1]
+        if pingHistory[i] == 0 or pingHistory[i + 1] == 0 then
+            seg.Size = UDim2.new(0, 0, 0, 0)
+        else
+            local x1 = (i - 1) * barW + barW * 0.5
+            local x2 = i * barW + barW * 0.5
+            local y1 = GRAPH_H * (1 - f1)
+            local y2 = GRAPH_H * (1 - f2)
+            local dx = x2 - x1
+            local dy = y2 - y1
+            local len = math.sqrt(dx * dx + dy * dy)
+            local angle = math.deg(math.atan2(dy, dx))
+            local cx = (x1 + x2) * 0.5
+            local cy = (y1 + y2) * 0.5
+            seg.Position  = UDim2.new(0, cx, 0, cy)
+            seg.Size      = UDim2.new(0, len, 0, 1)
+            seg.Rotation  = angle
+            seg.AnchorPoint = Vector2.new(0.5, 0.5)
+        end
+    end
+end
 local renderConn
 renderConn = RunService.RenderStepped:Connect(function(dt)
     fpsFrameCount += 1
@@ -3228,6 +3482,7 @@ renderConn = RunService.RenderStepped:Connect(function(dt)
         fpsAccumTime = 0
         updateFpsDisplay()
         updatePingDisplay()
+        updatePingGraph()
     end
 end)
 updatePingDisplay()
@@ -3254,10 +3509,7 @@ function updateLbDisplay()
     end
 end
 function updateSessionKillsDisplay()
-    if sessionKillsLocked then
-        enabled.sessionkills = false
-    end
-    if enabled.sessionkills then
+    if IS_ALLOWED_GAME then
         local _, total = getLeaderboardStats()
         if total and sessionKillsBaseline then
             sessionKillsLabel.Text = "Session Kills: " .. formatNumberWithCommas(total - sessionKillsBaseline)
@@ -3269,9 +3521,6 @@ function updateSessionKillsDisplay()
     else
         sessionKillsLabel.Text = "Session Kills: Disabled"
         sessionKillsLabel.TextColor3 = COLORS.disabledGray
-    end
-    if sessionKillsToggle then
-        sessionKillsToggle.Refresh()
     end
 end
 function hookLeaderboardLiveUpdates()
@@ -3298,28 +3547,17 @@ updateLbDisplay()
 updateSessionKillsDisplay()
 task.spawn(hookLeaderboardLiveUpdates)
 function updateExecutionDisplay()
-    if enabled.execution then
-        executionLabel.Text = "Times Executed: " .. formatNumberWithCommas(executionCount)
-        executionLabel.TextColor3 = COLORS.white
-    else
-        executionLabel.Text = "Times Executed: Disabled"
-        executionLabel.TextColor3 = COLORS.disabledGray
-    end
-    if executionToggle then
-        executionToggle.Refresh()
-    end
+    executionLabel.Text = "Times Executed: " .. formatNumberWithCommas(executionCount)
+    executionLabel.TextColor3 = COLORS.white
 end
 updateExecutionDisplay()
 function updatePlayerCountDisplay()
-    if enabled.playercount then
+    if IS_ALLOWED_GAME then
         playerCountLabel.Text = "Players: " .. formatNumberWithCommas(getPlayerCount())
         playerCountLabel.TextColor3 = COLORS.white
     else
         playerCountLabel.Text = "Players: Disabled"
         playerCountLabel.TextColor3 = COLORS.disabledGray
-    end
-    if playerCountToggle then
-        playerCountToggle.Refresh()
     end
 end
 updatePlayerCountDisplay()
@@ -3335,10 +3573,7 @@ function snapshotOwnedEmotes()
     end
 end
 function updateEmoteDisplay()
-    if emoteLocked then
-        enabled.emotes = false
-    end
-    if enabled.emotes then
+    if IS_ALLOWED_GAME then
         local ownedIds = getOwnedEmoteIds()
         local totalCount = countObtainableEmotes(getAllEmotesTable())
         local ownsAll = totalCount > 0 and #ownedIds >= totalCount
@@ -3366,9 +3601,6 @@ function updateEmoteDisplay()
         emotesOwnedLabel.TextColor3 = COLORS.disabledGray
         lastEmoteLabel.TextColor3 = COLORS.disabledGray
     end
-    if emotesToggle then
-        emotesToggle.Refresh()
-    end
 end
 function checkForNewEmote()
     local ownedIds = getOwnedEmoteIds()
@@ -3382,13 +3614,24 @@ function checkForNewEmote()
     updateEmoteDisplay()
 end
 emoteConnections = {}
-if not emoteLocked then
+if IS_ALLOWED_GAME then
     snapshotOwnedEmotes()
     table.insert(emoteConnections, LocalPlayer:GetAttributeChangedSignal("Emotes"):Connect(checkForNewEmote))
     table.insert(emoteConnections, LocalPlayer:GetAttributeChangedSignal("TotalKillsFrb"):Connect(updateEmoteDisplay))
     table.insert(emoteConnections, LocalPlayer:GetAttributeChangedSignal("LastEmoteSpin"):Connect(updateEmoteDisplay))
 end
 updateEmoteDisplay()
+function updateAwakeningDisplay()
+    local value = LocalPlayer:GetAttribute("Ultimate") or 0
+    awakeningLabel.Text = ("Awakening: %d%%"):format(value)
+    awakeningLabel.TextColor3 = COLORS.white
+end
+updateAwakeningDisplay()
+LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(function()
+    if not unloaded then
+        updateAwakeningDisplay()
+    end
+end)
 function formatElapsedTime(totalSeconds)
     totalSeconds = math.max(0, math.floor(totalSeconds))
     local days = math.floor(totalSeconds / 86400)
@@ -3400,7 +3643,7 @@ end
 task.spawn(function()
     while stopwatchLabel.Parent do
         stopwatchLabel.Text = "Session Time: " .. formatElapsedTime(os.clock() - sessionStartTime)
-if sessionKillsLocked then
+if not IS_ALLOWED_GAME then
     khrLabel.Text = "K/HR: N/A"
     khrLabel.TextColor3 = COLORS.disabledGray
 else
