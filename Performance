@@ -15,6 +15,8 @@ enabled = {
     playercount = true,
     emotes = false,
     antiafk = false,
+    playeresp = false,
+    hidetracers = false,
     customzoom = false,
     m1color = false,
 }
@@ -264,6 +266,484 @@ function applyAntiAFK(on)
     end
 end
 
+-- ── Player ESP ─────────────────────────────────────────────────────────────
+-- Screen-space ESP: tracer lines and a single rectangular hitbox marker.
+-- The hitbox is ONE Frame with ONE UIStroke, so it cannot have individual
+-- corner/line objects drifting out of sync.
+
+local espTracerGui = nil
+local espPlayerConnections = {}
+local espObjects = {}
+local espRenderConnection = nil
+
+local ESP_TRACER_TRANSPARENCY = 0.55
+local ESP_TRACER_THICKNESS    = 1
+local ESP_BOX_THICKNESS       = 1
+local ESP_BOX_SCALE            = 1.5
+
+local function getESPColor(player)
+    return (player and player.TeamColor and player.TeamColor.Color)
+        or Color3.fromRGB(255, 0, 0)
+end
+
+local function disconnectESPConnection(connection)
+    if connection then
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+end
+
+local function getTracerRoot(character)
+    if not character then return nil end
+    return character:FindFirstChild("HumanoidRootPart")
+        or character:FindFirstChild("UpperTorso")
+        or character:FindFirstChild("Torso")
+        or character:FindFirstChild("Head")
+end
+
+local function getCharacterBodyBounds(character)
+    if not character then return nil end
+
+    local root = character:FindFirstChild("HumanoidRootPart")
+    local humanoid = character:FindFirstChildOfClass("Humanoid")
+
+    if not root or not root:IsA("BasePart") then
+        return nil
+    end
+
+    -- Use the HumanoidRootPart as the center and the Humanoid's body
+    -- dimensions rather than scanning every animated/accessory part.
+    local bodyWidth = root.Size.X
+    local bodyDepth = root.Size.Z
+    local bodyHeight = root.Size.Y
+
+    if humanoid then
+        -- These describe the character's intended body scale and do not
+        -- expand when an animation moves a limb or accessory.
+        local hipHeight = humanoid.HipHeight
+
+        if typeof(hipHeight) == "number" and hipHeight > 0 then
+            bodyHeight = math.max(bodyHeight, hipHeight * 2)
+        end
+    end
+
+    local halfX = math.max(bodyWidth * 0.5, 1)
+    local halfZ = math.max(bodyDepth * 0.5, 1)
+    local halfY = math.max(bodyHeight * 0.5, 1)
+
+    local center = root.Position
+
+    return (
+        center - Vector3.new(halfX, halfY, halfZ)
+    ), (
+        center + Vector3.new(halfX, halfY, halfZ)
+    )
+end
+
+-- ONE Frame represents the complete hitbox.
+-- UIStroke is attached to that Frame, rather than using separate sides.
+local function makeBox(parent, color)
+    local box = Instance.new("Frame")
+    box.Name = "ESPBox"
+    box.BackgroundTransparency = 1
+    box.BorderSizePixel = 0
+    box.ZIndex = 3
+    box.Visible = false
+    box.Parent = parent
+
+    local stroke = Instance.new("UIStroke")
+    stroke.Name = "ESPBoxStroke"
+    stroke.ApplyStrokeMode = Enum.ApplyStrokeMode.Border
+    stroke.Thickness = ESP_BOX_THICKNESS
+    stroke.Transparency = 0
+    stroke.Color = color
+    stroke.Parent = box
+
+    box:SetAttribute("ESPBox", true)
+
+    return box
+end
+
+local function ensureBox(player)
+    if not espTracerGui then return nil end
+
+    local data = espObjects[player]
+    if not data then
+        data = {}
+        espObjects[player] = data
+    end
+
+    if data.box and data.box.Parent then
+        return data.box
+    end
+
+    local box = makeBox(espTracerGui, getESPColor(player))
+    box.Name = "ESPBox_" .. tostring(player.UserId)
+
+    data.box = box
+    return box
+end
+
+local function updateBox(box, minPoint, maxPoint, visible, color)
+    if not box then return end
+
+    if not visible or not minPoint or not maxPoint then
+        box.Visible = false
+        return
+    end
+
+    local width = maxPoint.X - minPoint.X
+    local height = maxPoint.Y - minPoint.Y
+
+    if width <= 2 or height <= 2 then
+        box.Visible = false
+        return
+    end
+
+    -- Keep the exact same tracking/bounds, but enlarge the displayed
+    -- rectangle by 1.3x around its center.
+    local centerX = (minPoint.X + maxPoint.X) * 0.5
+    local centerY = (minPoint.Y + maxPoint.Y) * 0.5
+    local scaledWidth = width * ESP_BOX_SCALE
+    local scaledHeight = height * ESP_BOX_SCALE
+    local scaledMinX = centerX - scaledWidth * 0.5
+    local scaledMinY = centerY - scaledHeight * 0.5
+
+    -- Update the complete rectangle as one object.
+    box.Position = UDim2.fromOffset(scaledMinX, scaledMinY)
+    box.Size = UDim2.fromOffset(scaledWidth, scaledHeight)
+
+    local stroke = box:FindFirstChild("ESPBoxStroke")
+    if stroke then
+        stroke.Color = color
+        stroke.Thickness = ESP_BOX_THICKNESS
+        stroke.Transparency = 0
+        stroke.Enabled = true
+    end
+
+    box.Visible = true
+end
+
+local function ensureTracer(player)
+    if not espTracerGui then return nil end
+
+    local data = espObjects[player]
+    if not data then
+        data = {}
+        espObjects[player] = data
+    end
+
+    local tracerName = "PlayerESPTracer_" .. tostring(player.UserId)
+    local existing = espTracerGui:FindFirstChild(tracerName)
+
+    if existing and existing:IsA("Frame") then
+        data.tracer = existing
+        return existing
+    end
+
+    local line = Instance.new("Frame")
+    line.Name = tracerName
+    line.AnchorPoint = Vector2.new(0.5, 0.5)
+    line.Size = UDim2.fromOffset(1, ESP_TRACER_THICKNESS)
+    line.BackgroundColor3 = getESPColor(player)
+    line.BackgroundTransparency = ESP_TRACER_TRANSPARENCY
+    line.BorderSizePixel = 0
+    line.Visible = false
+    line.ZIndex = 2
+    line.Parent = espTracerGui
+
+    data.tracer = line
+    return line
+end
+
+local function removeESPForPlayer(player)
+    local data = espObjects[player]
+
+    if data then
+        if data.tracer then
+            pcall(function()
+                data.tracer:Destroy()
+            end)
+        end
+
+        if data.box then
+            pcall(function()
+                data.box:Destroy()
+            end)
+        end
+    end
+
+    espObjects[player] = nil
+end
+
+local function setupESPPlayer(player)
+    if player == LocalPlayer or espPlayerConnections[player] then
+        return
+    end
+
+    local connections = {}
+    espPlayerConnections[player] = connections
+
+    table.insert(connections, player:GetPropertyChangedSignal("TeamColor"):Connect(function()
+        local color = getESPColor(player)
+        local data = espObjects[player]
+
+        if data then
+            if data.tracer then
+                data.tracer.BackgroundColor3 = color
+            end
+
+            if data.box then
+                local stroke = data.box:FindFirstChild("ESPBoxStroke")
+                if stroke then
+                    stroke.Color = color
+                end
+            end
+        end
+    end))
+
+    espObjects[player] = espObjects[player] or {}
+    ensureTracer(player)
+end
+
+local function updateTracerLine(line, fromPoint, toPoint, visible)
+    if not line then return end
+
+    if not visible then
+        line.Visible = false
+        return
+    end
+
+    local delta = toPoint - fromPoint
+    local length = delta.Magnitude
+
+    if length < 1 then
+        line.Visible = false
+        return
+    end
+
+    line.AnchorPoint = Vector2.new(0.5, 0.5)
+    line.Position = UDim2.fromOffset(
+        (fromPoint.X + toPoint.X) * 0.5,
+        (fromPoint.Y + toPoint.Y) * 0.5
+    )
+    line.Size = UDim2.fromOffset(length, ESP_TRACER_THICKNESS)
+    line.Rotation = math.deg(math.atan2(delta.Y, delta.X))
+    line.Visible = true
+end
+
+local function startPlayerESP()
+    if unloaded then return end
+
+    if espTracerGui then
+        pcall(function()
+            espTracerGui:Destroy()
+        end)
+    end
+
+    table.clear(espObjects)
+
+    espTracerGui = Instance.new("ScreenGui")
+    espTracerGui.Name = "PingFpsUI_PlayerESP_Tracers"
+    espTracerGui.ResetOnSpawn = false
+    espTracerGui.IgnoreGuiInset = true
+    espTracerGui.DisplayOrder = 2
+    espTracerGui.Parent = PlayerGui
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            setupESPPlayer(player)
+        end
+    end
+
+    espPlayerConnections.__PlayerAdded = Players.PlayerAdded:Connect(function(player)
+        if enabled.playeresp and not unloaded then
+            setupESPPlayer(player)
+        end
+    end)
+
+    espPlayerConnections.__PlayerRemoving = Players.PlayerRemoving:Connect(function(player)
+        local connections = espPlayerConnections[player]
+
+        if connections then
+            for _, connection in ipairs(connections) do
+                disconnectESPConnection(connection)
+            end
+            espPlayerConnections[player] = nil
+        end
+
+        removeESPForPlayer(player)
+    end)
+
+    espRenderConnection = RunService.RenderStepped:Connect(function()
+        if not enabled.playeresp or unloaded then
+            return
+        end
+
+        local camera = workspace.CurrentCamera
+        if not camera then return end
+
+        local viewport = camera.ViewportSize
+        local showTracer = not enabled.hidetracers
+        local showBox = true
+
+        local startPoint = Vector2.new(viewport.X * 0.5, viewport.Y)
+
+        for _, player in ipairs(Players:GetPlayers()) do
+            if player ~= LocalPlayer then
+                local character = player.Character
+                local color = getESPColor(player)
+
+                local data = espObjects[player]
+                if not data then
+                    setupESPPlayer(player)
+                    data = espObjects[player]
+                end
+
+                -- Tracer
+                local tracer = ensureTracer(player)
+
+                if tracer then
+                    if showTracer then
+                        local root = getTracerRoot(character)
+
+                        if root and root:IsA("BasePart") and root.Parent then
+                            local sp, onScreen =
+                                camera:WorldToViewportPoint(root.Position)
+
+                            updateTracerLine(
+                                tracer,
+                                startPoint,
+                                Vector2.new(sp.X, sp.Y),
+                                onScreen and sp.Z > 0
+                            )
+
+                            tracer.BackgroundColor3 = color
+                            tracer.BackgroundTransparency = ESP_TRACER_TRANSPARENCY
+                        else
+                            tracer.Visible = false
+                        end
+                    else
+                        tracer.Visible = false
+                    end
+                end
+
+                -- Single hitbox rectangle
+                local box = ensureBox(player)
+
+                if box and showBox and character then
+                    local wMin, wMax = getCharacterBodyBounds(character)
+
+                    if wMin and wMax then
+                        local sxMin, syMin = math.huge, math.huge
+                        local sxMax, syMax = -math.huge, -math.huge
+                        local anyInFront = false
+
+                        for _, cx in ipairs({wMin.X, wMax.X}) do
+                            for _, cy in ipairs({wMin.Y, wMax.Y}) do
+                                for _, cz in ipairs({wMin.Z, wMax.Z}) do
+                                    local sp =
+                                        camera:WorldToViewportPoint(
+                                            Vector3.new(cx, cy, cz)
+                                        )
+
+                                    if sp.Z > 0 then
+                                        anyInFront = true
+                                    end
+
+                                    sxMin = math.min(sxMin, sp.X)
+                                    syMin = math.min(syMin, sp.Y)
+                                    sxMax = math.max(sxMax, sp.X)
+                                    syMax = math.max(syMax, sp.Y)
+                                end
+                            end
+                        end
+
+                        if anyInFront
+                            and (sxMax - sxMin) > 2
+                            and (syMax - syMin) > 2 then
+
+                            updateBox(
+                                box,
+                                Vector2.new(sxMin, syMin),
+                                Vector2.new(sxMax, syMax),
+                                true,
+                                color
+                            )
+                        else
+                            updateBox(box, nil, nil, false, color)
+                        end
+                    else
+                        updateBox(box, nil, nil, false, color)
+                    end
+                elseif box then
+                    updateBox(box, nil, nil, false, color)
+                end
+            end
+        end
+    end)
+end
+
+local function stopPlayerESP()
+    if espRenderConnection then
+        disconnectESPConnection(espRenderConnection)
+        espRenderConnection = nil
+    end
+
+    for key, connections in pairs(espPlayerConnections) do
+        if type(key) ~= "string" then
+            for _, connection in ipairs(connections) do
+                disconnectESPConnection(connection)
+            end
+            espPlayerConnections[key] = nil
+        end
+    end
+
+    if espPlayerConnections.__PlayerAdded then
+        disconnectESPConnection(espPlayerConnections.__PlayerAdded)
+        espPlayerConnections.__PlayerAdded = nil
+    end
+
+    if espPlayerConnections.__PlayerRemoving then
+        disconnectESPConnection(espPlayerConnections.__PlayerRemoving)
+        espPlayerConnections.__PlayerRemoving = nil
+    end
+
+    for player in pairs(espObjects) do
+        removeESPForPlayer(player)
+    end
+
+    table.clear(espObjects)
+
+    if espTracerGui then
+        pcall(function()
+            espTracerGui:Destroy()
+        end)
+        espTracerGui = nil
+    end
+end
+
+local function applyPlayerESP(on)
+    if on then
+        startPlayerESP()
+
+        if hideTracersToggle then
+            hideTracersToggle.Locked = false
+            hideTracersToggle.Refresh()
+        end
+    else
+        stopPlayerESP()
+
+        enabled.hidetracers = false
+
+        if hideTracersToggle then
+            hideTracersToggle.Locked = true
+            hideTracersToggle.Refresh()
+        end
+    end
+end
+
 -- Custom Max Zoom
 local customZoomOriginalDistance = nil
 local customZoomLastAppliedValue = nil
@@ -317,6 +797,8 @@ sessionKillsLocked = not IS_ALLOWED_GAME
 emoteLocked = not IS_ALLOWED_GAME
 m1ColorLocked = not IS_ALLOWED_GAME
 dragLocked = false
+-- Forward declaration; assigned when the UI is built below.
+hideTracersToggle = nil
 currentFPS = 60
 fpsFrameCount = 0
 fpsAccumTime = 0
@@ -1361,6 +1843,8 @@ function persistPosition(pos)
     savePrefs(savedPrefs)
 end
 function persistToggleState(stateKey)
+    -- "hidetracers" is session-only and intentionally not saved.
+    if stateKey == "hidetracers" then return end
     savedPrefs.toggles = savedPrefs.toggles or {}
     savedPrefs.toggles[stateKey] = enabled[stateKey]
     savePrefs(savedPrefs)
@@ -1721,7 +2205,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.22"
+versionLabel.Text = "Version 3.28"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -1905,11 +2389,17 @@ executionToggle = createToggleRow("Execution", 174, "Execution", "execution", fa
 playerCountToggle = createToggleRow("PlayerCount", 204, "Players", "playercount", false, function() updatePlayerCountDisplay() end)
 emotesToggle = createToggleRow("Emotes", 234, "Emotes", "emotes", emoteLocked, function() updateEmoteDisplay() end)
 antiAfkToggle = createToggleRow("AntiAFK", 264, "Anti-AFK", "antiafk", false, function() applyAntiAFK(enabled.antiafk) end)
+playerESPToggle = createToggleRow("PlayerESP", 294, "Player ESP", "playeresp", false, function() applyPlayerESP(enabled.playeresp) end)
+-- "Hide Tracers" starts locked; it unlocks only while Player ESP is active.
+-- The preference is intentionally not persisted across sessions.
+hideTracersToggle = createToggleRow("HideTracers", 324, "Hide Tracers", "hidetracers", true, function()
+    -- No extra logic needed; the RenderStepped loop reads enabled.hidetracers directly.
+end)
 
 customZoomLabel = Instance.new("TextLabel")
 customZoomLabel.Name = "CustomZoomLabel"
 customZoomLabel.BackgroundTransparency = 1
-customZoomLabel.Position = UDim2.new(0, 20, 0, 294)
+customZoomLabel.Position = UDim2.new(0, 20, 0, 354)
 customZoomLabel.Size = UDim2.new(0, 132, 0, 22)
 customZoomLabel.Font = Enum.Font.Gotham
 customZoomLabel.Text = "Custom Max Zoom"
@@ -1921,7 +2411,7 @@ customZoomLabel.Parent = settingsMenu
 
 customZoomApplyButton = Instance.new("TextButton")
 customZoomApplyButton.Name = "CustomZoomApplyButton"
-customZoomApplyButton.Position = UDim2.new(0, 156, 0, 294)
+customZoomApplyButton.Position = UDim2.new(0, 156, 0, 354)
 customZoomApplyButton.Size = UDim2.new(0, 22, 0, 22)
 customZoomApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 customZoomApplyButton.AutoButtonColor = false
@@ -1944,7 +2434,7 @@ customZoomApplyStroke.Parent = customZoomApplyButton
 
 customZoomBox = Instance.new("TextBox")
 customZoomBox.Name = "CustomZoomBox"
-customZoomBox.Position = UDim2.new(0, 184, 0, 294)
+customZoomBox.Position = UDim2.new(0, 184, 0, 354)
 customZoomBox.Size = UDim2.new(0, 48, 0, 22)
 customZoomBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 customZoomBox.BorderSizePixel = 0
@@ -2004,7 +2494,7 @@ end)
 
 customZoomToggleFrame = Instance.new("Frame")
 customZoomToggleFrame.Name = "CustomZoomToggle"
-customZoomToggleFrame.Position = UDim2.new(1, -64, 0, 293)
+customZoomToggleFrame.Position = UDim2.new(1, -64, 0, 353)
 customZoomToggleFrame.Size = UDim2.new(0, 44, 0, 22)
 customZoomToggleFrame.BackgroundColor3 = enabled.customzoom and COLORS.toggleOn or COLORS.toggleOff
 customZoomToggleFrame.BackgroundTransparency = ELEMENT_TRANSPARENCY
@@ -2101,13 +2591,13 @@ customZoomApplyButton.MouseButton1Click:Connect(function()
     pulseColorButton(customZoomApplyStroke, Color3.fromRGB(70, 220, 110), "apply")
 end)
 
-m1ColorToggle = createToggleRow("M1Color", 324, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
+m1ColorToggle = createToggleRow("M1Color", 384, "Custom Colors", "m1color", m1ColorLocked, function() applyM1TrailColor(enabled.m1color) end)
 
 m1SwatchExpanded = false
 
 m1ExpandButton = Instance.new("TextButton")
 m1ExpandButton.Name = "M1ColorExpandButton"
-m1ExpandButton.Position = UDim2.new(0, 208, 0, 324)
+m1ExpandButton.Position = UDim2.new(0, 208, 0, 384)
 m1ExpandButton.Size = UDim2.new(0, 22, 0, 22)
 m1ExpandButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ExpandButton.AutoButtonColor = false
@@ -2125,7 +2615,7 @@ m1ExpandButtonCorner.Parent = m1ExpandButton
 m1HexBox = Instance.new("TextBox")
 m1HexBox.Name = "M1ColorHexBox"
 m1HexBox.AnchorPoint = Vector2.new(0, 0)
-m1HexBox.Position = UDim2.new(0, 76, 0, 324)
+m1HexBox.Position = UDim2.new(0, 76, 0, 384)
 m1HexBox.Size = UDim2.new(0, 126, 0, 22)
 m1HexBox.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1HexBox.BorderSizePixel = 0
@@ -2226,7 +2716,7 @@ makeColorTooltip(customZoomApplyButton, "Apply Zoom", 90)
 
 m1FavoriteButton = Instance.new("TextButton")
 m1FavoriteButton.Name = "M1ColorFavoriteButton"
-m1FavoriteButton.Position = UDim2.new(0, 20, 0, 324)
+m1FavoriteButton.Position = UDim2.new(0, 20, 0, 384)
 m1FavoriteButton.Size = UDim2.new(0, 22, 0, 22)
 m1FavoriteButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoriteButton.AutoButtonColor = false
@@ -2250,7 +2740,7 @@ table.insert(m1ColorActionButtons, m1FavoriteButton)
 
 m1ApplyButton = Instance.new("TextButton")
 m1ApplyButton.Name = "M1ColorApplyButton"
-m1ApplyButton.Position = UDim2.new(0, 48, 0, 324)
+m1ApplyButton.Position = UDim2.new(0, 48, 0, 384)
 m1ApplyButton.Size = UDim2.new(0, 22, 0, 22)
 m1ApplyButton.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1ApplyButton.AutoButtonColor = false
@@ -2302,7 +2792,7 @@ end
 
 m1FavoritesDropdown = Instance.new("Frame")
 m1FavoritesDropdown.Name = "M1FavoritesDropdown"
-m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 352)
+m1FavoritesDropdown.Position = UDim2.new(0, 20, 0, 412)
 m1FavoritesDropdown.Size = UDim2.new(0, 176, 0, 0)
 m1FavoritesDropdown.BackgroundColor3 = Color3.fromRGB(0, 0, 0)
 m1FavoritesDropdown.BackgroundTransparency = 0.08
@@ -2472,6 +2962,7 @@ end)
 captureAllCustomColorUIBaselines()
 applyM1TrailColor(enabled.m1color)
 applyAntiAFK(enabled.antiafk)
+applyPlayerESP(enabled.playeresp)
 
 -- ── FIX: disclaimer moved directly above the Unload button ───────────────────
 -- Old Y: 444. New Y: 462, so it sits flush above the button at 530.
@@ -2966,6 +3457,9 @@ function cleanupScript()
         pcall(function() conn:Disconnect() end)
     end
     table.clear(vfxWatchConnections)
+    pcall(function()
+        stopPlayerESP()
+    end)
     pcall(function()
         stopAntiAFK()
     end)
