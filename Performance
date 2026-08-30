@@ -2522,7 +2522,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.34"
+versionLabel.Text = "Version 3.35"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -3621,17 +3621,123 @@ if IS_ALLOWED_GAME then
     table.insert(emoteConnections, LocalPlayer:GetAttributeChangedSignal("LastEmoteSpin"):Connect(updateEmoteDisplay))
 end
 updateEmoteDisplay()
+local awakeningCharacterConnections = {}
+
+local function disconnectAwakeningCharacterConnections()
+    for _, connection in ipairs(awakeningCharacterConnections) do
+        pcall(function()
+            connection:Disconnect()
+        end)
+    end
+    table.clear(awakeningCharacterConnections)
+end
+
+local function getAwakeningPercentage()
+    local character = LocalPlayer.Character
+    if not character then
+        return 0, false
+    end
+
+    local ulted = character:GetAttribute("Ulted") == true
+
+    if ulted then
+        local primaryPart = character.PrimaryPart
+        local fill = primaryPart and primaryPart:GetAttribute("fill")
+
+        if type(fill) == "number" then
+            return math.clamp(fill, 0, 1) * 100, true
+        end
+
+        -- If the awakening is active but no draining fill value exists,
+        -- keep the display at 100% rather than incorrectly showing 0%.
+        return 100, true
+    end
+
+    return LocalPlayer:GetAttribute("Ultimate") or 0, false
+end
+
 function updateAwakeningDisplay()
-    local value = LocalPlayer:GetAttribute("Ultimate") or 0
-    awakeningLabel.Text = ("Awakening: %d%%"):format(value)
+    local value = getAwakeningPercentage()
+    awakeningLabel.Text = ("Awakening: %.1f%%"):format(value)
     awakeningLabel.TextColor3 = COLORS.white
 end
-updateAwakeningDisplay()
+
+local function connectAwakeningCharacter(character)
+    disconnectAwakeningCharacterConnections()
+
+    if not character then
+        updateAwakeningDisplay()
+        return
+    end
+
+    table.insert(
+        awakeningCharacterConnections,
+        character:GetAttributeChangedSignal("Ulted"):Connect(function()
+            if not unloaded then
+                updateAwakeningDisplay()
+            end
+        end)
+    )
+
+    local function connectPrimaryPartFill()
+        for i = #awakeningCharacterConnections, 1, -1 do
+            local _connection = awakeningCharacterConnections[i]
+            -- Only disconnect/rebuild the fill connection; the character
+            -- Ulted connection is kept by rebuilding all character connections.
+        end
+
+        disconnectAwakeningCharacterConnections()
+
+        table.insert(
+            awakeningCharacterConnections,
+            character:GetAttributeChangedSignal("Ulted"):Connect(function()
+                if not unloaded then
+                    updateAwakeningDisplay()
+                end
+            end)
+        )
+
+        local primaryPart = character.PrimaryPart
+        if primaryPart then
+            table.insert(
+                awakeningCharacterConnections,
+                primaryPart:GetAttributeChangedSignal("fill"):Connect(function()
+                    if not unloaded and character:GetAttribute("Ulted") == true then
+                        updateAwakeningDisplay()
+                    end
+                end)
+            )
+        end
+
+        updateAwakeningDisplay()
+    end
+
+    connectPrimaryPartFill()
+
+    table.insert(
+        awakeningCharacterConnections,
+        character:GetPropertyChangedSignal("PrimaryPart"):Connect(function()
+            if not unloaded then
+                connectPrimaryPartFill()
+            end
+        end)
+    )
+end
+
 LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(function()
-    if not unloaded then
+    if not unloaded and not (LocalPlayer.Character and LocalPlayer.Character:GetAttribute("Ulted") == true) then
         updateAwakeningDisplay()
     end
 end)
+
+LocalPlayer.CharacterAdded:Connect(function(character)
+    if not unloaded then
+        connectAwakeningCharacter(character)
+    end
+end)
+
+connectAwakeningCharacter(LocalPlayer.Character)
+updateAwakeningDisplay()
 function formatElapsedTime(totalSeconds)
     totalSeconds = math.max(0, math.floor(totalSeconds))
     local days = math.floor(totalSeconds / 86400)
