@@ -4092,34 +4092,6 @@ ContextActionService:BindActionAtPriority(
     Enum.KeyCode.Slash
 )
 
--- Clicking anywhere outside the custom chat closes it, matching the usual
--- Roblox chat-menu interaction without opening Roblox's native chat.
-table.insert(chatInputConnections, UserInputService.InputBegan:Connect(function(input)
-    if unloaded or not chatExpanded then
-        return
-    end
-
-    if input.UserInputType ~= Enum.UserInputType.MouseButton1
-        and input.UserInputType ~= Enum.UserInputType.Touch then
-        return
-    end
-
-    local point = input.Position
-    local absPos = chatPanel.AbsolutePosition
-    local absSize = chatPanel.AbsoluteSize
-    local inside = point.X >= absPos.X
-        and point.X <= absPos.X + absSize.X
-        and point.Y >= absPos.Y
-        and point.Y <= absPos.Y + absSize.Y
-
-    if not inside then
-        setChatExpanded(false)
-        if UserInputService:GetFocusedTextBox() == chatInputBox then
-            chatInputBox:ReleaseFocus()
-        end
-    end
-end))
-
 -- If a teleport changes the PlaceId without recreating this script, shut down
 -- every feature immediately. This is especially important for Custom Colors/VFX.
 gamePlaceGuardConnection = RunService.Heartbeat:Connect(function()
