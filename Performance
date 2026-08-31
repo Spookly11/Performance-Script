@@ -24,6 +24,7 @@ TweenService = game:GetService("TweenService")
 local Stats = game:GetService("Stats")
 HttpService = game:GetService("HttpService")
 UserInputService = game:GetService("UserInputService")
+ContextActionService = game:GetService("ContextActionService")
 LocalPlayer = Players.LocalPlayer
 PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 ALLOWED_PLACE_ID = 10449761463
@@ -256,6 +257,9 @@ function stopAntiAFK()
 end
 
 function applyAntiAFK(on)
+    if GAME_FEATURES_LOCKED then
+        on = false
+    end
     if on then
         startAntiAFK()
     else
@@ -722,6 +726,9 @@ local function stopPlayerESP()
 end
 
 local function applyPlayerESP(on)
+    if GAME_FEATURES_LOCKED then
+        on = false
+    end
     if on then
         startPlayerESP()
 
@@ -854,8 +861,16 @@ function getLeaderboardStats()
     end
     return monthly, total
 end
-function getPlayerCount()
-    return #Players:GetPlayers()
+function getServerPlayerCounts()
+    local players = Players:GetPlayers()
+    local current = #players
+    local cap = tonumber(Players.MaxPlayers)
+
+    if not cap or cap <= 0 then
+        cap = current
+    end
+
+    return current, cap
 end
 cachedOriginalProps = {}
 touchedVFXObjects = {}
@@ -1139,6 +1154,11 @@ function getVFXWatchRoots()
 end
 
 function startVFXWatcher()
+    if GAME_FEATURES_LOCKED then
+        VFXConfig.Enabled = false
+        return
+    end
+
     disconnectVFXWatchers()
 
     vfxSessionId += 1
@@ -1216,6 +1236,15 @@ local customChatWrapper = nil
 local customChatPreviousCallback = nil
 local customChatMonitorRunning = false
 local customChatSession = 0
+
+-- The custom chat owns both the chat window and the chat input.
+-- Roblox's native UI is disabled while this panel is active so "/" only
+-- opens/focuses this custom chat.
+local nativeChatWindowConfiguration = nil
+local nativeChatInputBarConfiguration = nil
+local nativeChatWindowEnabled = nil
+local nativeChatInputEnabled = nil
+local chatInputConnections = {}
 
 local function installCustomChatColor()
     if customChatInstalled or not enabled.m1color or unloaded then
@@ -1306,31 +1335,8 @@ local function installCustomChatColor()
             return nil
         end
 
-        -- Recolor both the display name prefix and the message body.
-        local prefixProperties
-        if cfg then
-            local prefixOk, derivedPrefix = pcall(function()
-                return cfg:DeriveNewMessageProperties()
-            end)
-            if prefixOk and derivedPrefix then
-                prefixProperties = derivedPrefix
-            end
-        end
-
-        if not prefixProperties then
-            local prefixOk, fallbackPrefix = pcall(function()
-                return Instance.new("ChatWindowMessageProperties")
-            end)
-            if prefixOk then
-                prefixProperties = fallbackPrefix
-            end
-        end
-
-        if prefixProperties then
-            prefixProperties.TextColor3 = currentM1Color
-            properties.PrefixTextProperties = prefixProperties
-        end
-
+        -- Custom Colors applies ONLY to the message body. Never recolor
+        -- the display-name prefix; Roblox keeps its normal username color.
         properties.TextColor3 = currentM1Color
 
         return properties
@@ -1701,6 +1707,10 @@ function refreshActiveCustomColors()
 end
 
 function applyM1TrailColor(useCustom)
+    if GAME_FEATURES_LOCKED then
+        useCustom = false
+    end
+
     if useCustom then
         VFXConfig.TargetColor = currentM1Color
         VFXConfig.Enabled = true
@@ -1827,6 +1837,24 @@ if savedPrefs.toggles then
         end
     end
 end
+
+-- TSB-only features are never allowed to reactivate in another experience.
+-- Every other feature is universal and remains available regardless of which
+-- experience is currently running (including Custom Max Zoom, Ping, FPS,
+-- Anti-AFK, Player ESP, Hide Tracers, and Hide Username).
+GAME_FEATURE_LOCK_KEYS = {
+    -- These are the only TSB-specific toggles stored in enabled.
+    -- The other TSB-only displays are gated by IS_ALLOWED_GAME.
+    lbstats = true,
+    m1color = true,
+}
+GAME_FEATURES_LOCKED = not IS_ALLOWED_GAME
+if GAME_FEATURES_LOCKED then
+    for key in pairs(GAME_FEATURE_LOCK_KEYS) do
+        enabled[key] = false
+    end
+end
+
 -- "m1color" is retained as the internal preference key for backwards compatibility;
 -- the user-facing feature is now named "Custom Colors".
 function persistPosition(pos)
@@ -2388,6 +2416,7 @@ awakeningLabel.Position = UDim2.new(0, 20, 0, 324)
 awakeningLabel.Size = UDim2.new(1, -40, 0, 24)
 awakeningLabel.Font = Enum.Font.Gotham
 awakeningLabel.Text = "Awakening: --%"
+awakeningLabel.Visible = IS_ALLOWED_GAME
 awakeningLabel.TextColor3 = COLORS.white
 awakeningLabel.TextSize = 16
 awakeningLabel.TextXAlignment = Enum.TextXAlignment.Left
@@ -2522,7 +2551,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.35"
+versionLabel.Text = "Version 3.36"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -2531,6 +2560,7 @@ versionLabel.Parent = statsMenu
 
 toggles = {}
 function createToggleRow(name, yPos, labelText, stateKey, locked, onToggle)
+    locked = locked or (GAME_FEATURES_LOCKED and GAME_FEATURE_LOCK_KEYS[stateKey] == true)
     local label = Instance.new("TextLabel")
     label.BackgroundTransparency = 1
     label.Position = UDim2.new(0, 20, 0, yPos)
@@ -2901,6 +2931,42 @@ m1HexBoxStroke.Thickness = 1
 m1HexBoxStroke.Color = COLORS.white
 m1HexBoxStroke.Transparency = 0.7
 m1HexBoxStroke.Parent = m1HexBox
+
+local m1HexFocusLine = Instance.new("Frame")
+m1HexFocusLine.Name = "FocusLine"
+m1HexFocusLine.AnchorPoint = Vector2.new(0.5, 1)
+m1HexFocusLine.Position = UDim2.new(0.5, 0, 1, 0)
+m1HexFocusLine.Size = UDim2.new(0, 0, 0, 1)
+m1HexFocusLine.BackgroundColor3 = COLORS.white
+m1HexFocusLine.BorderSizePixel = 0
+m1HexFocusLine.ZIndex = 14
+m1HexFocusLine.Parent = m1HexBox
+
+local m1HexFocusTween
+local function animateM1HexFocusLine(focused)
+    if m1HexFocusTween then
+        pcall(function() m1HexFocusTween:Cancel() end)
+    end
+
+    m1HexFocusTween = TweenService:Create(
+        m1HexFocusLine,
+        TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        {
+            Size = focused
+                and UDim2.new(1, 0, 0, 1)
+                or UDim2.new(0, 0, 0, 1)
+        }
+    )
+    m1HexFocusTween:Play()
+end
+
+m1HexBox.Focused:Connect(function()
+    animateM1HexFocusLine(true)
+end)
+
+m1HexBox.FocusLost:Connect(function()
+    animateM1HexFocusLine(false)
+end)
 
 m1FavoriteColors = {}
 if type(savedPrefs.m1FavoriteColors) == "table" then
@@ -3405,6 +3471,710 @@ statsButton.MouseButton1Click:Connect(function()
         setStatsOpen(true)
     end
 end)
+
+-- Only create the built-in chat UI when Roblox says the local player
+-- is actually permitted to use experience text chat.
+local function playerCanUseChat()
+    local ok, canChat = pcall(function()
+        return TextChatService:CanUserChatAsync(LocalPlayer.UserId)
+    end)
+
+    return ok and canChat == true
+end
+
+local function disableNativeChatUI()
+    nativeChatWindowConfiguration = TextChatService:FindFirstChildOfClass("ChatWindowConfiguration")
+    nativeChatInputBarConfiguration = TextChatService:FindFirstChildOfClass("ChatInputBarConfiguration")
+
+    if nativeChatWindowConfiguration then
+        nativeChatWindowEnabled = nativeChatWindowConfiguration.Enabled
+        pcall(function()
+            nativeChatWindowConfiguration.Enabled = false
+        end)
+    end
+
+    if nativeChatInputBarConfiguration then
+        nativeChatInputEnabled = nativeChatInputBarConfiguration.Enabled
+        pcall(function()
+            nativeChatInputBarConfiguration.Enabled = false
+        end)
+    end
+end
+
+local function restoreNativeChatUI()
+    if nativeChatWindowConfiguration and nativeChatWindowConfiguration.Parent and nativeChatWindowEnabled ~= nil then
+        pcall(function()
+            nativeChatWindowConfiguration.Enabled = nativeChatWindowEnabled
+        end)
+    end
+
+    if nativeChatInputBarConfiguration and nativeChatInputBarConfiguration.Parent and nativeChatInputEnabled ~= nil then
+        pcall(function()
+            nativeChatInputBarConfiguration.Enabled = nativeChatInputEnabled
+        end)
+    end
+
+    nativeChatWindowConfiguration = nil
+    nativeChatInputBarConfiguration = nil
+    nativeChatWindowEnabled = nil
+    nativeChatInputEnabled = nil
+end
+
+if playerCanUseChat() then
+    disableNativeChatUI()
+-- ─── BUILT-IN CHAT PANEL ────────────────────────────────────────────────────
+-- Roblox's default chat holds ~50 messages; we keep 100 (2x).
+local CHAT_MAX_MESSAGES  = 100
+local CHAT_WIDTH         = SETTINGS_WIDTH  -- 300 px
+local CHAT_HEADER_HEIGHT = 36
+
+-- Viewport-relative sizing: fills the gap below the stats/settings panels.
+local viewportHeight = workspace.CurrentCamera
+    and workspace.CurrentCamera.ViewportSize.Y
+    or 600
+
+local CHAT_HEIGHT    = math.max(100, viewportHeight - PANEL_Y_OFFSET - SETTINGS_HEIGHT - 8)
+local CHAT_VISIBLE_Y = 0                            -- full panel on screen (Y from bottom)
+local CHAT_HEADER_Y  = CHAT_HEIGHT - CHAT_HEADER_HEIGHT  -- only header peeks out
+local CHAT_HIDDEN_Y  = CHAT_HEIGHT + 10             -- fully off-screen
+
+-- ── Panel frame ─────────────────────────────────────────────────────────────
+chatPanel = Instance.new("Frame")
+chatPanel.Name                 = "ChatPanel"
+chatPanel.AnchorPoint          = Vector2.new(0, 1)
+chatPanel.Position             = UDim2.new(0, 0, 1, CHAT_HIDDEN_Y)
+chatPanel.Size                 = UDim2.new(0, CHAT_WIDTH, 0, CHAT_HEIGHT)
+chatPanel.BackgroundColor3     = COLORS.panel
+chatPanel.BackgroundTransparency = PANEL_TRANSPARENCY
+chatPanel.ClipsDescendants     = true
+chatPanel.ZIndex               = 10
+chatPanel.Parent               = screenGui
+
+chatPanelStroke               = Instance.new("UIStroke")
+chatPanelStroke.Color         = COLORS.white
+chatPanelStroke.Thickness     = 1
+chatPanelStroke.Transparency  = 0
+chatPanelStroke.Parent        = chatPanel
+
+local chatPanelCorner         = Instance.new("UICorner")
+chatPanelCorner.CornerRadius  = UDim.new(0, 6)
+chatPanelCorner.Parent        = chatPanel
+
+-- ── Header (solid, non-transparent) ─────────────────────────────────────────
+chatHeader                         = Instance.new("Frame")
+chatHeader.Name                    = "ChatHeader"
+chatHeader.Position                = UDim2.new(0, 0, 0, 0)
+chatHeader.Size                    = UDim2.new(1, 0, 0, CHAT_HEADER_HEIGHT)
+chatHeader.BackgroundColor3        = COLORS.panel
+chatHeader.BackgroundTransparency  = 0
+chatHeader.BorderSizePixel         = 0
+chatHeader.ZIndex                  = 12
+chatHeader.Parent                  = chatPanel
+
+chatHeaderLabel                    = Instance.new("TextLabel")
+chatHeaderLabel.Name               = "ChatHeaderLabel"
+chatHeaderLabel.BackgroundTransparency = 1
+chatHeaderLabel.Position           = UDim2.new(0, 20, 0, 0)
+chatHeaderLabel.Size               = UDim2.new(1, -40, 1, 0)
+chatHeaderLabel.Font               = Enum.Font.GothamBold
+chatHeaderLabel.Text               = "BUILT-IN CHAT"
+chatHeaderLabel.TextColor3         = Color3.fromRGB(130, 90, 255)
+chatHeaderLabel.TextSize           = 15
+chatHeaderLabel.TextXAlignment     = Enum.TextXAlignment.Left
+chatHeaderLabel.ZIndex             = 13
+chatHeaderLabel.Parent             = chatHeader
+
+chatHeaderButton                   = Instance.new("TextButton")
+chatHeaderButton.Name              = "ChatHeaderButton"
+chatHeaderButton.BackgroundTransparency = 1
+chatHeaderButton.Size              = UDim2.new(1, 0, 1, 0)
+chatHeaderButton.Position          = UDim2.new(0, 0, 0, 0)
+chatHeaderButton.Text              = ""
+chatHeaderButton.ZIndex            = 14
+chatHeaderButton.Parent            = chatHeader
+
+-- ── Unread-message badge ────────────────────────────────────────────────────
+local chatUnreadCount = 0
+local chatUnreadBadge = Instance.new("Frame")
+chatUnreadBadge.Name = "UnreadBadge"
+chatUnreadBadge.AnchorPoint = Vector2.new(1, 0.5)
+chatUnreadBadge.Position = UDim2.new(1, -12, 0.5, 0)
+chatUnreadBadge.Size = UDim2.new(0, 22, 0, 22)
+chatUnreadBadge.BackgroundColor3 = COLORS.white
+chatUnreadBadge.BorderSizePixel = 0
+chatUnreadBadge.ZIndex = 15
+chatUnreadBadge.Visible = false
+chatUnreadBadge.Parent = chatHeader
+
+local chatUnreadCorner = Instance.new("UICorner")
+chatUnreadCorner.CornerRadius = UDim.new(1, 0)
+chatUnreadCorner.Parent = chatUnreadBadge
+
+local chatUnreadLabel = Instance.new("TextLabel")
+chatUnreadLabel.Name = "UnreadCount"
+chatUnreadLabel.BackgroundTransparency = 1
+chatUnreadLabel.Size = UDim2.new(1, 0, 1, 0)
+chatUnreadLabel.Font = Enum.Font.GothamBold
+chatUnreadLabel.Text = "0"
+chatUnreadLabel.TextColor3 = Color3.fromRGB(0, 0, 0)
+chatUnreadLabel.TextSize = 11
+chatUnreadLabel.TextXAlignment = Enum.TextXAlignment.Center
+chatUnreadLabel.TextYAlignment = Enum.TextYAlignment.Center
+chatUnreadLabel.ZIndex = 16
+chatUnreadLabel.Parent = chatUnreadBadge
+
+local function updateChatUnreadBadge()
+    if chatUnreadCount <= 0 or chatExpanded then
+        chatUnreadBadge.Visible = false
+        return
+    end
+
+    chatUnreadLabel.Text = chatUnreadCount >= 100 and "99+" or tostring(chatUnreadCount)
+    chatUnreadBadge.Visible = true
+end
+
+-- ── Scrolling message list ───────────────────────────────────────────────────
+local INPUT_ROW_HEIGHT = 30
+local chatMessages = Instance.new("ScrollingFrame")
+chatMessages.Name                   = "ChatMessages"
+chatMessages.Position               = UDim2.new(0, 8, 0, CHAT_HEADER_HEIGHT + 6)
+chatMessages.Size                   = UDim2.new(1, -16, 1, -(CHAT_HEADER_HEIGHT + INPUT_ROW_HEIGHT + 14))
+chatMessages.BackgroundTransparency = 1
+chatMessages.BorderSizePixel        = 0
+chatMessages.CanvasSize             = UDim2.new(0, 0, 0, 0)
+chatMessages.AutomaticCanvasSize    = Enum.AutomaticSize.Y
+chatMessages.ScrollBarThickness     = 3
+chatMessages.ScrollingDirection     = Enum.ScrollingDirection.Y
+chatMessages.ClipsDescendants       = true
+chatMessages.ZIndex                 = 12
+chatMessages.Parent                 = chatPanel
+
+local chatMsgLayout               = Instance.new("UIListLayout")
+chatMsgLayout.SortOrder           = Enum.SortOrder.LayoutOrder
+chatMsgLayout.Padding             = UDim.new(0, 3)
+chatMsgLayout.Parent              = chatMessages
+
+local chatMsgPadding              = Instance.new("UIPadding")
+chatMsgPadding.PaddingLeft        = UDim.new(0, 2)
+chatMsgPadding.PaddingRight       = UDim.new(0, 2)
+chatMsgPadding.PaddingTop         = UDim.new(0, 2)
+chatMsgPadding.PaddingBottom      = UDim.new(0, 2)
+chatMsgPadding.Parent             = chatMessages
+
+-- ── Input row ───────────────────────────────────────────────────────────────
+local chatInputRow                = Instance.new("Frame")
+chatInputRow.Name                 = "ChatInputRow"
+chatInputRow.AnchorPoint          = Vector2.new(0, 1)
+chatInputRow.Position             = UDim2.new(0, 10, 1, -8)
+chatInputRow.Size                 = UDim2.new(1, -20, 0, INPUT_ROW_HEIGHT - 4)
+chatInputRow.BackgroundTransparency = 1
+chatInputRow.BorderSizePixel      = 0
+chatInputRow.ZIndex               = 13
+chatInputRow.Parent               = chatPanel
+
+chatInputBox                      = Instance.new("TextBox")
+chatInputBox.Name                 = "ChatInputBox"
+chatInputBox.Position             = UDim2.new(0, 0, 0, 0)
+chatInputBox.Size                 = UDim2.new(1, -30, 1, 0)
+chatInputBox.BackgroundColor3     = Color3.fromRGB(0, 0, 0)
+chatInputBox.BackgroundTransparency = 0
+chatInputBox.BorderSizePixel      = 0
+chatInputBox.ClearTextOnFocus     = false
+chatInputBox.Font                 = Enum.Font.Gotham
+chatInputBox.PlaceholderText      = "Type a message..."
+chatInputBox.PlaceholderColor3    = COLORS.disabledGray
+chatInputBox.Text                 = ""
+chatInputBox.TextColor3           = COLORS.white
+chatInputBox.TextSize             = 13
+chatInputBox.TextXAlignment       = Enum.TextXAlignment.Left
+chatInputBox.ZIndex               = 13
+chatInputBox.Parent               = chatInputRow
+
+local chatInputPadding            = Instance.new("UIPadding")
+chatInputPadding.PaddingLeft      = UDim.new(0, 5)
+chatInputPadding.Parent           = chatInputBox
+
+local chatInputCorner             = Instance.new("UICorner")
+chatInputCorner.CornerRadius      = UDim.new(0, 4)
+chatInputCorner.Parent            = chatInputBox
+
+local chatInputStroke             = Instance.new("UIStroke")
+chatInputStroke.Thickness         = 1
+chatInputStroke.Color             = COLORS.white
+chatInputStroke.Transparency      = 0.7
+chatInputStroke.Parent            = chatInputBox
+
+local chatInputFocusLine          = Instance.new("Frame")
+chatInputFocusLine.Name           = "FocusLine"
+chatInputFocusLine.AnchorPoint    = Vector2.new(0.5, 1)
+chatInputFocusLine.Position       = UDim2.new(0.5, 0, 1, 0)
+chatInputFocusLine.Size           = UDim2.new(0, 0, 0, 1)
+chatInputFocusLine.BackgroundColor3 = COLORS.white
+chatInputFocusLine.BorderSizePixel  = 0
+chatInputFocusLine.ZIndex         = 14
+chatInputFocusLine.Parent         = chatInputBox
+
+local chatSendButton              = Instance.new("TextButton")
+chatSendButton.Name               = "SendButton"
+chatSendButton.Position           = UDim2.new(1, -26, 0, 0)
+chatSendButton.Size               = UDim2.new(0, 26, 1, 0)
+chatSendButton.BackgroundColor3   = Color3.fromRGB(0, 0, 0)
+chatSendButton.BackgroundTransparency = 0
+chatSendButton.BorderSizePixel    = 0
+chatSendButton.AutoButtonColor    = false
+chatSendButton.Font               = Enum.Font.Gotham
+chatSendButton.Text               = "↑"
+chatSendButton.TextColor3         = COLORS.white
+chatSendButton.TextSize           = 18
+chatSendButton.ZIndex             = 14
+chatSendButton.Parent             = chatInputRow
+
+local chatSendCorner              = Instance.new("UICorner")
+chatSendCorner.CornerRadius       = UDim.new(0, 4)
+chatSendCorner.Parent             = chatSendButton
+
+local chatSendStroke              = Instance.new("UIStroke")
+chatSendStroke.Thickness          = 1
+chatSendStroke.Color              = COLORS.white
+chatSendStroke.Transparency       = 0.7
+chatSendStroke.Parent             = chatSendButton
+
+-- ── Name colour palette (exact Roblox algorithm) ───────────────────
+local CHAT_NAME_COLORS = {
+    Color3.new(253/255,  41/255,  67/255),
+    Color3.new(  1/255, 162/255, 255/255),
+    Color3.new(  2/255, 184/255, 117/255),
+    Color3.new(245/255, 205/255,  48/255),
+    Color3.new(232/255, 100/255, 255/255),
+    Color3.new(255/255, 149/255,  34/255),
+    Color3.new(184/255, 153/255, 255/255),
+    Color3.new(255/255, 184/255, 212/255),
+}
+
+local function getNameColorForUsername(username)
+    local sum = 0
+    for i = 1, #username do
+        local charValue    = string.byte(string.sub(username, i, i))
+        local reverseIndex = #username - i + 1
+        if (#username % 2 == 1) then
+            reverseIndex = reverseIndex - 1
+        end
+        if (reverseIndex % 4 >= 2) then
+            charValue = -charValue
+        end
+        sum = sum + charValue
+    end
+    local index = (sum % #CHAT_NAME_COLORS) + 1
+    return CHAT_NAME_COLORS[index]
+end
+
+-- ── Message state ────────────────────────────────────────────
+-- Each entry: { frame=Frame, layoutOrder=number }
+local chatMessageList   = {}   -- ordered oldest→newest
+local chatLayoutCounter = 0    -- monotonically increasing LayoutOrder
+local chatLastSenderId  = nil  -- UserId of the player who sent the last message
+chatExpanded = false
+
+
+-- ── Shared helpers ────────────────────────────────────────────────────
+local function escapeRich(s)
+    return s:gsub("&", "&amp;"):gsub("<", "&lt;"):gsub(">", "&gt;")
+end
+
+local function isChatScrolledToBottom()
+    local canvasHeight = chatMessages.AbsoluteCanvasSize.Y
+    local windowHeight = chatMessages.AbsoluteWindowSize.Y
+    local maxCanvasPosition = math.max(0, canvasHeight - windowHeight)
+
+    -- A tiny tolerance prevents layout rounding from making the user count
+    -- as "scrolled up" while already at the bottom.
+    return chatMessages.CanvasPosition.Y >= maxCanvasPosition - 5
+end
+
+local function scrollChatToBottom()
+    task.defer(function()
+        if not chatMessages or not chatMessages.Parent then
+            return
+        end
+
+        local maxCanvasPosition = math.max(
+            0,
+            chatMessages.AbsoluteCanvasSize.Y - chatMessages.AbsoluteWindowSize.Y
+        )
+        chatMessages.CanvasPosition = Vector2.new(0, maxCanvasPosition)
+    end)
+end
+
+-- ── Build one message row ────────────────────────────────────────────────
+--   displayName  : string | nil  (nil → system msg)
+--   username     : string | nil  (.Name for colour lookup; nil → system msg)
+--   userId       : number | nil  (for consecutive-sender tracking)
+--   messageText  : string
+--   isLocalPlayer: bool
+local function addChatMessage(displayName, username, userId, messageText, isLocalPlayer)
+    -- Messages received while the menu is closed become unread. Messages
+    -- received while it is open are intentionally not counted.
+    if not chatExpanded then
+        chatUnreadCount = math.min(100, chatUnreadCount + 1)
+        updateChatUnreadBadge()
+    end
+
+    -- Only follow new messages when the user was already at the bottom.
+    -- If they manually scrolled upward, leave their position untouched.
+    local shouldFollowLatest = isChatScrolledToBottom()
+
+    -- Enforce message cap.
+    if #chatMessageList >= CHAT_MAX_MESSAGES then
+        local oldest = table.remove(chatMessageList, 1)
+        if oldest and oldest.frame and oldest.frame.Parent then
+            oldest.frame:Destroy()
+        end
+    end
+
+    chatLayoutCounter += 1
+
+    local row = Instance.new("Frame")
+    row.Name                 = "ChatMsg" .. chatLayoutCounter
+    row.BackgroundTransparency = 1
+    row.Size                 = UDim2.new(1, 0, 0, 0)
+    row.AutomaticSize        = Enum.AutomaticSize.Y
+    row.LayoutOrder          = chatLayoutCounter
+    row.ZIndex               = 13
+    row.Parent               = chatMessages
+
+    if displayName and username and userId then
+        -- ── Player message ─────────────────────────────────────
+        local sameAsPrev = (userId == chatLastSenderId)
+
+        -- Display-name color is ALWAYS based on the player's username.
+        -- Custom Colors only affects the message body, never the name.
+        local nameColor = getNameColorForUsername(username)
+
+        local msgColor = COLORS.white
+        if isLocalPlayer and enabled.m1color then
+            msgColor = currentM1Color
+        end
+
+        local richText
+        if sameAsPrev then
+            -- Continuation line: no display name prefix.
+            richText = string.format(
+                '<font color="%s">%s</font>',
+                colorToHex(msgColor),
+                escapeRich(messageText)
+            )
+        else
+            -- First line from this sender: show display name.
+            richText = string.format(
+                '<font color="%s"><b>%s</b></font><font color="%s">: %s</font>',
+                colorToHex(nameColor),
+                escapeRich(displayName),
+                colorToHex(msgColor),
+                escapeRich(messageText)
+            )
+        end
+
+        local lbl = Instance.new("TextLabel")
+        lbl.BackgroundTransparency = 1
+        lbl.Size           = UDim2.new(1, 0, 0, 0)
+        lbl.AutomaticSize  = Enum.AutomaticSize.Y
+        lbl.Font           = Enum.Font.Gotham
+        lbl.RichText       = true
+        lbl.Text           = richText
+        lbl.TextSize       = 13
+        lbl.TextWrapped    = true
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextYAlignment = Enum.TextYAlignment.Top
+        lbl.ZIndex         = 13
+        lbl.Parent         = row
+
+        chatLastSenderId = userId
+    else
+        -- ── System / server message ────────────────────────
+        -- A system message breaks the consecutive-sender streak.
+        chatLastSenderId = nil
+
+        local lbl = Instance.new("TextLabel")
+        lbl.BackgroundTransparency = 1
+        lbl.Size           = UDim2.new(1, 0, 0, 0)
+        lbl.AutomaticSize  = Enum.AutomaticSize.Y
+        lbl.Font           = Enum.Font.GothamItalic
+        lbl.Text           = messageText
+        lbl.TextColor3     = Color3.fromRGB(200, 200, 200)
+        lbl.TextSize       = 13
+        lbl.TextWrapped    = true
+        lbl.TextXAlignment = Enum.TextXAlignment.Left
+        lbl.TextYAlignment = Enum.TextYAlignment.Top
+        lbl.ZIndex         = 13
+        lbl.Parent         = row
+    end
+
+    table.insert(chatMessageList, { frame = row, layoutOrder = chatLayoutCounter })
+
+    if shouldFollowLatest then
+        scrollChatToBottom()
+    end
+end
+
+-- ── Send a message ──────────────────────────────────
+local function sendChatMessage(text)
+    text = text:match("^%s*(.-)%s*$")
+    if text == "" then return end
+
+    local textChannels   = TextChatService:FindFirstChild("TextChannels")
+    local generalChannel = textChannels and (
+        textChannels:FindFirstChild("RBXGeneral")
+        or textChannels:FindFirstChild("General")
+        or textChannels:FindFirstChildWhichIsA("TextChannel")
+    )
+
+    if generalChannel then
+        local ok, err = pcall(function()
+            generalChannel:SendAsync(text)
+        end)
+        if not ok then
+            addChatMessage(nil, nil, nil, "[Chat error: " .. tostring(err) .. "]", false)
+        end
+    else
+        addChatMessage(nil, nil, nil, "[Chat unavailable]", false)
+    end
+end
+
+-- ── Listen for incoming messages ──────────────────────────────
+local chatMessageConnection = TextChatService.MessageReceived:Connect(function(msg)
+    if unloaded then return end
+
+    local src = msg.TextSource
+    if src then
+        local player      = Players:GetPlayerByUserId(src.UserId)
+        -- DisplayName: prefer the live player object; fall back to TextSource.Name
+        local displayName = (player and player.DisplayName) or src.Name
+        -- Username (.Name) is used only for colour lookup, never displayed
+        local username    = (player and player.Name) or src.Name
+        local userId      = src.UserId
+        local isLocal     = (userId == LocalPlayer.UserId)
+        addChatMessage(displayName, username, userId, msg.Text or "", isLocal)
+    else
+        local text = msg.Text or ""
+        if text ~= "" then
+            addChatMessage(nil, nil, nil, text, false)
+        end
+    end
+end)
+
+-- ── Input box focus animation ─────────────────────────────────────────────────
+local chatInputFocusTween
+
+local function animateChatInputFocusLine(focused)
+    if chatInputFocusTween then
+        pcall(function() chatInputFocusTween:Cancel() end)
+    end
+    chatInputFocusTween = TweenService:Create(
+        chatInputFocusLine,
+        TweenInfo.new(0.18, Enum.EasingStyle.Quint, Enum.EasingDirection.Out),
+        { Size = focused and UDim2.new(1, 0, 0, 1) or UDim2.new(0, 0, 0, 1) }
+    )
+    chatInputFocusTween:Play()
+end
+
+chatInputBox.Focused:Connect(function()
+    animateChatInputFocusLine(true)
+end)
+
+chatInputBox.FocusLost:Connect(function(enterPressed)
+    animateChatInputFocusLine(false)
+    if enterPressed then
+        local txt = chatInputBox.Text
+        chatInputBox.Text = ""
+        sendChatMessage(txt)
+    end
+end)
+
+-- ── Send button ───────────────────────────────────────────────────────────────
+chatSendButton.MouseButton1Click:Connect(function()
+    local txt = chatInputBox.Text
+    if txt ~= "" then
+        chatInputBox.Text = ""
+        chatInputBox:ReleaseFocus()
+        sendChatMessage(txt)
+    end
+end)
+
+-- ── Tween logic: slide down/up ────────────────────────────────────────────────
+chatTweenHolder  = {}
+
+local function cancelChatTween()
+    if chatTweenHolder[1] then
+        pcall(function() chatTweenHolder[1]:Cancel() end)
+        chatTweenHolder[1] = nil
+    end
+end
+
+local function setChatExpanded(expand)
+    cancelChatTween()
+    chatPanel.Visible = true
+
+    if expand then
+        chatUnreadCount = 0
+        updateChatUnreadBadge()
+    end
+
+    local targetY     = expand and CHAT_VISIBLE_Y or CHAT_HEADER_Y
+    local easingStyle = expand and Enum.EasingStyle.Quint or Enum.EasingStyle.Quad
+    local easingDir   = expand and Enum.EasingDirection.Out or Enum.EasingDirection.In
+    local duration    = expand and 0.28 or 0.22
+
+    local t = TweenService:Create(
+        chatPanel,
+        TweenInfo.new(duration, easingStyle, easingDir),
+        { Position = UDim2.new(0, 0, 1, targetY) }
+    )
+    chatTweenHolder[1] = t
+    t.Completed:Connect(function()
+        if chatTweenHolder[1] == t then chatTweenHolder[1] = nil end
+    end)
+    t:Play()
+    chatExpanded = expand
+end
+
+-- Start collapsed (header-only visible).
+setChatExpanded(false)
+
+-- Toggle on header click.
+chatHeaderButton.MouseButton1Click:Connect(function()
+    setChatExpanded(not chatExpanded)
+end)
+
+-- Roblox-style "/" shortcut for the custom chat.
+-- The opening slash is explicitly suppressed from the TextBox.
+local CHAT_SLASH_ACTION = "PingFpsUI_CustomChatSlash"
+local suppressOpeningSlash = false
+
+-- Roblox can insert the key into a TextBox after the input callback returns,
+-- so watch the Text property and remove only the slash used to open chat.
+table.insert(chatInputConnections, chatInputBox:GetPropertyChangedSignal("Text"):Connect(function()
+    if suppressOpeningSlash and chatInputBox.Text:sub(1, 1) == "/" then
+        chatInputBox.Text = chatInputBox.Text:sub(2)
+        suppressOpeningSlash = false
+    end
+end))
+
+ContextActionService:BindActionAtPriority(
+    CHAT_SLASH_ACTION,
+    function(_, inputState)
+        if inputState ~= Enum.UserInputState.Begin then
+            return Enum.ContextActionResult.Sink
+        end
+
+        -- If the custom input is already focused, '/' is a normal character.
+        if UserInputService:GetFocusedTextBox() then
+            return Enum.ContextActionResult.Pass
+        end
+
+        if unloaded or not chatPanel or not chatPanel.Parent then
+            return Enum.ContextActionResult.Sink
+        end
+
+        suppressOpeningSlash = true
+        chatInputBox.Text = ""
+        setChatExpanded(true)
+        chatInputBox:CaptureFocus()
+
+        -- Safety timeout: don't suppress a future, legitimately typed slash.
+        task.delay(0.5, function()
+            suppressOpeningSlash = false
+        end)
+
+        return Enum.ContextActionResult.Sink
+    end,
+    false,
+    Enum.ContextActionPriority.High.Value + 100,
+    Enum.KeyCode.Slash
+)
+
+-- Clicking anywhere outside the custom chat closes it, matching the usual
+-- Roblox chat-menu interaction without opening Roblox's native chat.
+table.insert(chatInputConnections, UserInputService.InputBegan:Connect(function(input)
+    if unloaded or not chatExpanded then
+        return
+    end
+
+    if input.UserInputType ~= Enum.UserInputType.MouseButton1
+        and input.UserInputType ~= Enum.UserInputType.Touch then
+        return
+    end
+
+    local point = input.Position
+    local absPos = chatPanel.AbsolutePosition
+    local absSize = chatPanel.AbsoluteSize
+    local inside = point.X >= absPos.X
+        and point.X <= absPos.X + absSize.X
+        and point.Y >= absPos.Y
+        and point.Y <= absPos.Y + absSize.Y
+
+    if not inside then
+        setChatExpanded(false)
+        if UserInputService:GetFocusedTextBox() == chatInputBox then
+            chatInputBox:ReleaseFocus()
+        end
+    end
+end))
+
+-- If a teleport changes the PlaceId without recreating this script, shut down
+-- every feature immediately. This is especially important for Custom Colors/VFX.
+gamePlaceGuardConnection = RunService.Heartbeat:Connect(function()
+    if unloaded then return end
+
+    if game.PlaceId ~= ALLOWED_PLACE_ID and not GAME_FEATURES_LOCKED then
+        GAME_FEATURES_LOCKED = true
+        IS_ALLOWED_GAME = false
+
+        -- Disable ONLY TSB-specific features. Universal features such as
+        -- Custom Max Zoom, Ping, FPS, Anti-AFK, Player ESP, Hide Tracers,
+        -- and Hide Username remain available in every experience.
+        for key in pairs(GAME_FEATURE_LOCK_KEYS) do
+            enabled[key] = false
+        end
+
+        -- Immediately stop all TSB-specific visual effects and refresh the
+        -- TSB-only labels so they display their disabled state.
+        pcall(applyM1TrailColor, false)
+        if updateLbDisplay then updateLbDisplay() end
+        if updateSessionKillsDisplay then updateSessionKillsDisplay() end
+        if updateEmoteDisplay then updateEmoteDisplay() end
+        if updateAwakeningDisplay then updateAwakeningDisplay() end
+    end
+end)
+
+-- ── Cleanup hook ──────────────────────────────────────────────────────────────
+-- Stored in an upvalue so cleanupScript() below can disconnect it.
+chatCleanupHook = function()
+    for _, connection in ipairs(chatInputConnections) do
+        pcall(function() connection:Disconnect() end)
+    end
+    table.clear(chatInputConnections)
+
+    pcall(function()
+        ContextActionService:UnbindAction(CHAT_SLASH_ACTION)
+    end)
+
+    restoreNativeChatUI()
+
+    if chatMessageConnection then
+        pcall(function() chatMessageConnection:Disconnect() end)
+        chatMessageConnection = nil
+    end
+    for _, entry in ipairs(chatMessageList) do
+        if entry.frame and entry.frame.Parent then
+            entry.frame:Destroy()
+        end
+    end
+    table.clear(chatMessageList)
+end
+-- ─── END BUILT-IN CHAT PANEL ────────────────────────────────────────────────
+end
+
+
 function updatePingDisplay()
     if enabled.ping then
         local ping = getPing()
@@ -3552,13 +4322,12 @@ function updateExecutionDisplay()
 end
 updateExecutionDisplay()
 function updatePlayerCountDisplay()
-    if IS_ALLOWED_GAME then
-        playerCountLabel.Text = "Players: " .. formatNumberWithCommas(getPlayerCount())
-        playerCountLabel.TextColor3 = COLORS.white
-    else
-        playerCountLabel.Text = "Players: Disabled"
-        playerCountLabel.TextColor3 = COLORS.disabledGray
-    end
+    local current, cap = getServerPlayerCounts()
+    playerCountLabel.Text = "Players: "
+        .. formatNumberWithCommas(current)
+        .. "/"
+        .. formatNumberWithCommas(cap)
+    playerCountLabel.TextColor3 = COLORS.white
 end
 updatePlayerCountDisplay()
 playerCountConnections = {
@@ -3657,6 +4426,14 @@ local function getAwakeningPercentage()
 end
 
 function updateAwakeningDisplay()
+    awakeningLabel.Visible = true
+
+    if not IS_ALLOWED_GAME then
+        awakeningLabel.Text = "Awakening: Disabled"
+        awakeningLabel.TextColor3 = COLORS.disabledGray
+        return
+    end
+
     local value = getAwakeningPercentage()
     awakeningLabel.Text = ("Awakening: %.1f%%"):format(value)
     awakeningLabel.TextColor3 = COLORS.white
@@ -3724,17 +4501,21 @@ local function connectAwakeningCharacter(character)
     )
 end
 
-LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(function()
-    if not unloaded and not (LocalPlayer.Character and LocalPlayer.Character:GetAttribute("Ulted") == true) then
-        updateAwakeningDisplay()
-    end
-end)
+if IS_ALLOWED_GAME then
+    LocalPlayer:GetAttributeChangedSignal("Ultimate"):Connect(function()
+        if not unloaded and not (LocalPlayer.Character and LocalPlayer.Character:GetAttribute("Ulted") == true) then
+            updateAwakeningDisplay()
+        end
+    end)
 
-LocalPlayer.CharacterAdded:Connect(function(character)
-    if not unloaded then
-        connectAwakeningCharacter(character)
-    end
-end)
+    LocalPlayer.CharacterAdded:Connect(function(character)
+        if not unloaded then
+            connectAwakeningCharacter(character)
+        end
+    end)
+else
+    updateAwakeningDisplay()
+end
 
 connectAwakeningCharacter(LocalPlayer.Character)
 updateAwakeningDisplay()
@@ -3887,7 +4668,17 @@ function cleanupScript()
         pcall(function() statsTweenHolder[1]:Cancel() end)
         statsTweenHolder[1] = nil
     end
-
+    if chatTweenHolder and chatTweenHolder[1] then
+        pcall(function() chatTweenHolder[1]:Cancel() end)
+        chatTweenHolder[1] = nil
+    end
+    if chatCleanupHook then
+        pcall(chatCleanupHook)
+    end
+    if gamePlaceGuardConnection then
+        pcall(function() gamePlaceGuardConnection:Disconnect() end)
+        gamePlaceGuardConnection = nil
+    end
     if screenGui and screenGui.Parent then
         screenGui:Destroy()
     end
