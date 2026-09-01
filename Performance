@@ -2551,7 +2551,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.37"
+versionLabel.Text = "Version 3.38"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -3637,6 +3637,12 @@ end
 local INPUT_ROW_HEIGHT = 30
 local chatMessages = Instance.new("ScrollingFrame")
 chatMessages.Name                   = "ChatMessages"
+
+-- If the user manually scrolls up, give them 60 seconds before
+-- automatically returning the chat to the latest messages.
+local chatAutoScrollSession = 0
+local chatAutoScrollPending = false
+local chatAutoScrollConnection = nil
 chatMessages.Position               = UDim2.new(0, 8, 0, CHAT_HEADER_HEIGHT + 6)
 chatMessages.Size                   = UDim2.new(1, -16, 1, -(CHAT_HEADER_HEIGHT + INPUT_ROW_HEIGHT + 14))
 chatMessages.BackgroundTransparency = 1
@@ -3804,6 +3810,44 @@ local function scrollChatToBottom()
         chatMessages.CanvasPosition = Vector2.new(0, maxCanvasPosition)
     end)
 end
+
+-- Start a one-minute countdown the first time the user scrolls up.
+-- Additional scrolling while already scrolled up does not restart the timer.
+-- Returning to the bottom cancels the pending countdown.
+chatAutoScrollConnection = chatMessages:GetPropertyChangedSignal("CanvasPosition"):Connect(function()
+    if unloaded or not chatMessages or not chatMessages.Parent then
+        return
+    end
+
+    if isChatScrolledToBottom() then
+        chatAutoScrollSession += 1
+        chatAutoScrollPending = false
+        return
+    end
+
+    if chatAutoScrollPending then
+        return
+    end
+
+    chatAutoScrollPending = true
+    chatAutoScrollSession += 1
+    local session = chatAutoScrollSession
+
+    task.delay(60, function()
+        if unloaded
+            or not chatMessages
+            or not chatMessages.Parent
+            or session ~= chatAutoScrollSession then
+            return
+        end
+
+        chatAutoScrollPending = false
+
+        if not isChatScrolledToBottom() then
+            scrollChatToBottom()
+        end
+    end)
+end)
 
 -- ── Build one message row ────────────────────────────────────────────────
 --   displayName  : string | nil  (nil → system msg)
@@ -4677,6 +4721,16 @@ end)
 -- ── Cleanup hook ──────────────────────────────────────────────────────────────
 -- Stored in an upvalue so cleanupScript() below can disconnect it.
 chatCleanupHook = function()
+    -- Cancel any pending one-minute auto-scroll and disconnect its watcher.
+    chatAutoScrollSession += 1
+    chatAutoScrollPending = false
+    if chatAutoScrollConnection then
+        pcall(function()
+            chatAutoScrollConnection:Disconnect()
+        end)
+        chatAutoScrollConnection = nil
+    end
+
     for _, connection in ipairs(chatInputConnections) do
         pcall(function() connection:Disconnect() end)
     end
