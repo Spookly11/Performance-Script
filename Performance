@@ -2551,7 +2551,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.36"
+versionLabel.Text = "Version 3.37"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -3811,7 +3811,20 @@ end
 --   userId       : number | nil  (for consecutive-sender tracking)
 --   messageText  : string
 --   isLocalPlayer: bool
-local function addChatMessage(displayName, username, userId, messageText, isLocalPlayer)
+local function startWhisperThread(player)
+    if not player or player == LocalPlayer or unloaded then return end
+    if not chatInputBox or not chatInputBox.Parent then return end
+
+    if setChatExpanded then
+        setChatExpanded(true)
+    end
+
+    chatInputBox.Text = "/w @" .. player.Name .. " "
+    chatInputBox.CursorPosition = #chatInputBox.Text + 1
+    chatInputBox:CaptureFocus()
+end
+
+local function addChatMessage(displayName, username, userId, messageText, isLocalPlayer, isWhisper)
     -- Messages received while the menu is closed become unread. Messages
     -- received while it is open are intentionally not counted.
     if not chatExpanded then
@@ -3844,7 +3857,8 @@ local function addChatMessage(displayName, username, userId, messageText, isLoca
 
     if displayName and username and userId then
         -- ── Player message ─────────────────────────────────────
-        local sameAsPrev = (userId == chatLastSenderId)
+        -- Whispers always show the sender name so the [Whisper] tag is never hidden.
+        local sameAsPrev = (userId == chatLastSenderId) and not isWhisper
 
         -- Display-name color is ALWAYS based on the player's username.
         -- Custom Colors only affects the message body, never the name.
@@ -3855,12 +3869,21 @@ local function addChatMessage(displayName, username, userId, messageText, isLoca
             msgColor = currentM1Color
         end
 
+        local WHISPER_COLOR = "#C384F5"
         local richText
         if sameAsPrev then
             -- Continuation line: no display name prefix.
             richText = string.format(
                 '<font color="%s">%s</font>',
                 colorToHex(msgColor),
+                escapeRich(messageText)
+            )
+        elseif isWhisper then
+            -- Whisper: purple [Whisper] tag so it stands out from public chat.
+            richText = string.format(
+                '<font color="%s"><i>[Whisper]</i> <b>%s</b>: %s</font>',
+                WHISPER_COLOR,
+                escapeRich(displayName),
                 escapeRich(messageText)
             )
         else
@@ -3887,6 +3910,32 @@ local function addChatMessage(displayName, username, userId, messageText, isLoca
         lbl.TextYAlignment = Enum.TextYAlignment.Top
         lbl.ZIndex         = 13
         lbl.Parent         = row
+
+        -- Click the player's displayed name to begin a whisper thread.
+        -- The hitbox is restricted to the approximate rendered name width so
+        -- clicking the message body does not start a whisper.
+        local whisperNameButton = Instance.new("TextButton")
+        whisperNameButton.Name = "WhisperNameButton"
+        whisperNameButton.BackgroundTransparency = 1
+        whisperNameButton.BorderSizePixel = 0
+        whisperNameButton.AutoButtonColor = false
+        whisperNameButton.Text = ""
+        whisperNameButton.Position = UDim2.new(0, 0, 0, 0)
+        whisperNameButton.Size = UDim2.new(
+            0,
+            math.max(10, (utf8.len(displayName) or 0) * 7 + 10),
+            0,
+            18
+        )
+        whisperNameButton.ZIndex = 15
+        whisperNameButton.Parent = row
+
+        whisperNameButton.MouseButton1Click:Connect(function()
+            local player = Players:GetPlayerByUserId(userId)
+            if player then
+                startWhisperThread(player)
+            end
+        end)
 
         chatLastSenderId = userId
     else
@@ -3916,12 +3965,506 @@ local function addChatMessage(displayName, username, userId, messageText, isLoca
     end
 end
 
+-- Forward declarations used by the native Roblox whisper bridge.
+local CHAT_SLASH_ACTION = "PingFpsUI_CustomChatSlash"
+local suppressOpeningSlash = false
+local _setChatExpanded
+
+-- Whisper target autocomplete state.
+local whisperAutocompleteConnection = nil
+
+local function findWhisperPlayer(prefix)
+    prefix = (prefix or ""):gsub("^@", ""):lower()
+    if prefix == "" then return nil end
+
+    local exactUsername
+    local exactDisplayName
+    local matches = {}
+
+    for _, player in ipairs(Players:GetPlayers()) do
+        if player ~= LocalPlayer then
+            local username = player.Name:lower()
+            local displayName = player.DisplayName:lower()
+
+            if username == prefix then
+                exactUsername = player
+                break
+            elseif displayName == prefix then
+                exactDisplayName = player
+            end
+
+            if username:sub(1, #prefix) == prefix
+                or displayName:sub(1, #prefix) == prefix then
+                table.insert(matches, player)
+            end
+        end
+    end
+
+    return exactUsername or exactDisplayName or (#matches == 1 and matches[1]) or nil
+end
+
+local function updateWhisperAutocomplete()
+    if not chatInputBox or not chatInputBox:IsFocused() then return end
+
+    local value = chatInputBox.Text
+    local lowerValue = value:lower()
+
+    local prefixLength
+    if lowerValue:sub(1, 3) == "/w " then
+        prefixLength = 3
+    elseif lowerValue:sub(1, 9) == "/whisper " then
+        prefixLength = 9
+    else
+        return
+    end
+
+    local remainder = value:sub(prefixLength + 1)
+
+    -- Only autocomplete the target while there is no message yet.
+    if remainder:find(" ") then return end
+
+    local target = findWhisperPlayer(remainder)
+    if not target then return end
+
+    local completed = value:sub(1, prefixLength) .. "@" .. target.Name
+    if value == completed then return end
+
+    chatInputBox.Text = completed
+    chatInputBox.CursorPosition = #completed + 1
+end
+
 -- ── Send a message ──────────────────────────────────
 local function sendChatMessage(text)
     text = text:match("^%s*(.-)%s*$")
     if text == "" then return end
 
-    local textChannels   = TextChatService:FindFirstChild("TextChannels")
+    local textChannels = TextChatService:FindFirstChild("TextChannels")
+
+    -- /whisper and /w cannot go through SendAsync on RBXGeneral because
+    -- RBXWhisperCommand intercepts them client-side to create the whisper
+    -- channel. Strategy:
+    -- 1. If a whisper channel already exists for that player, use it directly.
+    -- 2. If not, simulate input through the native chat bar using VirtualUser
+    --    so Roblox's own command pipeline handles channel creation.
+    local lower = text:lower()
+    local whisperPrefix = nil
+    if lower:sub(1, 9) == "/whisper " then
+        whisperPrefix = 9
+    elseif lower:sub(1, 3) == "/w " then
+        whisperPrefix = 3
+    end
+
+    if whisperPrefix then
+        local remainder  = text:sub(whisperPrefix + 1)
+        local spaceIdx   = remainder:find(" ")
+        local targetName = spaceIdx and remainder:sub(1, spaceIdx - 1) or remainder
+        local msgBody    = spaceIdx and remainder:sub(spaceIdx + 1) or ""
+
+        if msgBody == "" then
+            addChatMessage(nil, nil, nil, "[Whisper usage: /w username message]", false)
+            return
+        end
+
+        -- Find the target player (display name or username, case-insensitive).
+        -- Autocomplete intentionally inserts "@Username", so strip the @ before
+        -- resolving the player. This is also compatible with manually typed
+        -- "/w @Username" commands.
+        local targetPlayer = nil
+        local targetLookup = targetName:gsub("^@", "")
+        local targetLower  = targetLookup:lower()
+
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p.Name:lower() == targetLower
+                or p.DisplayName:lower() == targetLower then
+                targetPlayer = p
+                break
+            end
+        end
+
+        if not targetPlayer then
+            addChatMessage(nil, nil, nil, '[Whisper] Player "' .. targetName .. '" not found.', false)
+            return
+        end
+
+        -- Check for an existing whisper channel (named "RBXWhisper:minId_maxId").
+        local localId    = LocalPlayer.UserId
+        local targetId   = targetPlayer.UserId
+        local chanName   = "RBXWhisper:" .. math.min(localId, targetId) .. "_" .. math.max(localId, targetId)
+        local whisperCh  = textChannels and textChannels:FindFirstChild(chanName)
+
+        if whisperCh then
+            -- Channel already open — send the message body directly.
+            local ok, err = pcall(function() whisperCh:SendAsync(msgBody) end)
+            if not ok then
+                addChatMessage(nil, nil, nil, "[Whisper error: " .. tostring(err) .. "]", false)
+            end
+            return
+        end
+
+        -- No existing channel. Roblox's built-in RBXWhisperCommand is a
+        -- two-step command: /w <player> first enters whisper mode and creates
+        -- RBXWhisper:<id>_<id>, then the next normal message is sent through
+        -- that whisper channel. Sending "/w player message" as one command
+        -- does NOT reliably send the message.
+        task.spawn(function()
+            local inputBarConfig = nativeChatInputBarConfiguration
+                or TextChatService:FindFirstChildOfClass("ChatInputBarConfiguration")
+            local windowConfig = nativeChatWindowConfiguration
+                or TextChatService:FindFirstChildOfClass("ChatWindowConfiguration")
+
+            if not inputBarConfig then
+                addChatMessage(nil, nil, nil, "[Whisper error: native chat input is unavailable.]", false)
+                return
+            end
+
+            local previousWindowEnabled = windowConfig and windowConfig.Enabled
+            local previousInputEnabled = inputBarConfig.Enabled
+            local previousPanelVisible = chatPanel and chatPanel.Visible
+
+            local function restoreCustomChat()
+                if windowConfig and previousWindowEnabled ~= nil then
+                    pcall(function()
+                        windowConfig.Enabled = previousWindowEnabled
+                    end)
+                end
+
+                pcall(function()
+                    inputBarConfig.Enabled = previousInputEnabled
+                end)
+
+                if chatPanel and chatPanel.Parent then
+                    chatPanel.Visible = previousPanelVisible ~= false
+                end
+
+                -- Restore our custom slash handler.
+                pcall(function()
+                    ContextActionService:BindActionAtPriority(
+                        CHAT_SLASH_ACTION,
+                        function(_, inputState)
+                            if inputState ~= Enum.UserInputState.Begin then
+                                return Enum.ContextActionResult.Sink
+                            end
+
+                            if UserInputService:GetFocusedTextBox() then
+                                return Enum.ContextActionResult.Pass
+                            end
+
+                            if unloaded or not chatPanel or not chatPanel.Parent then
+                                return Enum.ContextActionResult.Sink
+                            end
+
+                            suppressOpeningSlash = true
+                            chatInputBox.Text = ""
+                            setChatExpanded(true)
+                            chatInputBox:CaptureFocus()
+
+                            task.delay(0.5, function()
+                                suppressOpeningSlash = false
+                            end)
+
+                            return Enum.ContextActionResult.Sink
+                        end,
+                        false,
+                        Enum.ContextActionPriority.High.Value + 100,
+                        Enum.KeyCode.Slash
+                    )
+                end)
+            end
+
+            local function findNativeChatTextBox()
+                local camera = workspace.CurrentCamera
+                local viewport = camera and camera.ViewportSize
+                    or Vector2.new(1280, 720)
+
+                local best = nil
+                local bestScore = -math.huge
+
+                for _, obj in ipairs(PlayerGui:GetDescendants()) do
+                    if obj:IsA("TextBox") and obj.Visible and obj.Active then
+                        local size = obj.AbsoluteSize
+                        local pos = obj.AbsolutePosition
+
+                        if size.X >= 150 and size.Y >= 15 then
+                            local centerX = pos.X + size.X * 0.5
+                            local centerY = pos.Y + size.Y * 0.5
+
+                            -- Native chat input is normally centered near the
+                            -- bottom of the viewport. Prefer that over unrelated
+                            -- TextBoxes elsewhere in the game.
+                            local bottomDistance = math.abs(viewport.Y - centerY)
+                            local centerDistance = math.abs(viewport.X * 0.5 - centerX)
+
+                            if bottomDistance <= 180 then
+                                local score =
+                                    (1000 - bottomDistance * 5)
+                                    + (500 - centerDistance)
+
+                                local name = obj.Name:lower()
+                                local placeholder = ""
+                                pcall(function()
+                                    placeholder = (obj.PlaceholderText or ""):lower()
+                                end)
+
+                                if name:find("chat")
+                                    or name:find("input")
+                                    or placeholder:find("chat")
+                                    or placeholder:find("type") then
+                                    score += 2000
+                                end
+
+                                if score > bestScore then
+                                    bestScore = score
+                                    best = obj
+                                end
+                            end
+                        end
+                    end
+                end
+
+                return best
+            end
+
+            local function focusNativeChatInput()
+                local camera = workspace.CurrentCamera
+                local viewport = camera and camera.ViewportSize
+                    or Vector2.new(1280, 720)
+
+                local textBox = findNativeChatTextBox()
+
+                local clickPos
+                if textBox then
+                    clickPos = textBox.AbsolutePosition
+                        + textBox.AbsoluteSize * 0.5
+                else
+                    -- Fallback for the normal Roblox input-bar position.
+                    clickPos = Vector2.new(viewport.X * 0.5, viewport.Y - 28)
+                end
+
+                local camCF = camera and camera.CFrame or CFrame.new()
+                local vu = game:GetService("VirtualUser")
+
+                pcall(function()
+                    vu:CaptureController()
+                end)
+
+                pcall(function()
+                    vu:Button1Down(clickPos, camCF)
+                    task.wait(0.05)
+                    vu:Button1Up(clickPos, camCF)
+                end)
+
+                task.wait(0.12)
+
+                -- If Roblox did not focus the TextBox from the virtual click,
+                -- try the actual native TextBox's CaptureFocus method.
+                if textBox and textBox.Parent then
+                    local focused = false
+                    pcall(function()
+                        focused = UserInputService:GetFocusedTextBox() == textBox
+                    end)
+
+                    if not focused then
+                        pcall(function()
+                            textBox:CaptureFocus()
+                        end)
+                    end
+                end
+
+                task.wait(0.08)
+                return vu
+            end
+
+            local function pressNativeEnter()
+                -- TypeString is used for the actual command/message text.
+                -- Some Roblox/client combinations do not treat "\n" supplied
+                -- to TypeString as an Enter key, so use VirtualInputManager as
+                -- a submission fallback only when necessary.
+                local pressed = false
+
+                pcall(function()
+                    local vim = game:GetService("VirtualInputManager")
+                    vim:SendKeyEvent(true, Enum.KeyCode.Return, false, game)
+                    task.wait(0.03)
+                    vim:SendKeyEvent(false, Enum.KeyCode.Return, false, game)
+                    pressed = true
+                end)
+
+                return pressed
+            end
+
+            -- Release the custom "/" interceptor before native input receives
+            -- the slash command.
+            pcall(function()
+                ContextActionService:UnbindAction(CHAT_SLASH_ACTION)
+            end)
+
+            -- Hide only our replacement panel while the native bar is visible.
+            -- It is restored immediately after the command/message completes.
+            if chatPanel then
+                chatPanel.Visible = false
+            end
+
+            if windowConfig then
+                pcall(function()
+                    windowConfig.Enabled = true
+                end)
+            end
+
+            pcall(function()
+                inputBarConfig.Enabled = true
+            end)
+
+            task.wait(0.2)
+
+            local vu = focusNativeChatInput()
+
+            -- Step 1: enter Roblox's native whisper mode. Use @Username so the
+            -- built-in command parser gets an unambiguous username, even when
+            -- the player's DisplayName contains spaces.
+            local command = "/w @" .. targetPlayer.Name
+            local commandTyped = pcall(function()
+                vu:TypeString(command .. "\n")
+            end)
+
+            if not commandTyped then
+                restoreCustomChat()
+                addChatMessage(nil, nil, nil, "[Whisper error: native input failed.]", false)
+                return
+            end
+
+            -- Give the newline supplied to TypeString a chance to submit.
+            task.wait(0.2)
+
+            local channelCreated = false
+            for _ = 1, 15 do
+                if textChannels then
+                    local candidate = textChannels:FindFirstChild(chanName)
+                    if candidate then
+                        whisperCh = candidate
+                        channelCreated = true
+                        break
+                    end
+                end
+                task.wait(0.1)
+            end
+
+            -- If "\n" was inserted as text rather than being interpreted as
+            -- Enter, submit the command with a real Return key and wait again.
+            if not channelCreated then
+                pressNativeEnter()
+
+                for _ = 1, 20 do
+                    if textChannels then
+                        local candidate = textChannels:FindFirstChild(chanName)
+                        if candidate then
+                            whisperCh = candidate
+                            channelCreated = true
+                            break
+                        end
+                    end
+                    task.wait(0.1)
+                end
+            end
+
+            if not channelCreated or not whisperCh then
+                restoreCustomChat()
+                addChatMessage(
+                    nil,
+                    nil,
+                    nil,
+                    "[Whisper error: Roblox did not create the whisper channel.]",
+                    false
+                )
+                return
+            end
+
+            -- Step 2: Roblox is now in native whisper mode. The next normal
+            -- message is sent through RBXWhisper, so type ONLY the message body.
+            -- Do not put /w in front of it again.
+            task.wait(0.12)
+
+            -- Watch for the actual server-accepted whisper. The existing
+            -- MessageReceived listener will render it in the custom menu; this
+            -- temporary listener is only a submission confirmation/fallback.
+            local delivered = false
+            local deliveryConnection = TextChatService.MessageReceived:Connect(function(received)
+                if delivered or not received then
+                    return
+                end
+
+                local receivedText = received.Text or ""
+                local receivedChannel = received.TextChannel
+                local receivedChannelName = ""
+
+                pcall(function()
+                    receivedChannelName = receivedChannel and receivedChannel.Name or ""
+                end)
+
+                if receivedText == msgBody
+                    and receivedChannelName == chanName then
+                    delivered = true
+                end
+            end)
+
+            -- Refocus the native input in case command submission released it.
+            local focusedBox = UserInputService:GetFocusedTextBox()
+            if not focusedBox then
+                vu = focusNativeChatInput()
+            end
+
+            local messageTyped = pcall(function()
+                vu:TypeString(msgBody .. "\n")
+            end)
+
+            if not messageTyped then
+                pcall(function()
+                    deliveryConnection:Disconnect()
+                end)
+                restoreCustomChat()
+                addChatMessage(nil, nil, nil, "[Whisper error: message input failed.]", false)
+                return
+            end
+
+            -- Give TypeString's newline a chance to submit.
+            local deliveryDeadline = os.clock() + 0.8
+            while not delivered and os.clock() < deliveryDeadline do
+                task.wait(0.1)
+            end
+
+            -- Some clients insert "\n" into the TextBox instead of generating
+            -- a real Return key event. In that case, press Return exactly once.
+            if not delivered then
+                pressNativeEnter()
+
+                local retryDeadline = os.clock() + 1.0
+                while not delivered and os.clock() < retryDeadline do
+                    task.wait(0.1)
+                end
+            end
+
+            pcall(function()
+                deliveryConnection:Disconnect()
+            end)
+
+            -- Do not fabricate a chat message if Roblox rejected the send.
+            -- A successful MessageReceived event is what makes the message
+            -- appear in the custom menu, exactly like an ordinary whisper.
+            if not delivered then
+                addChatMessage(
+                    nil,
+                    nil,
+                    nil,
+                    "[Whisper error: Roblox did not accept the message.]",
+                    false
+                )
+            end
+
+            restoreCustomChat()
+        end)
+        return
+    end
+
+    -- Normal message: send to the general channel.
     local generalChannel = textChannels and (
         textChannels:FindFirstChild("RBXGeneral")
         or textChannels:FindFirstChild("General")
@@ -3944,6 +4487,13 @@ end
 local chatMessageConnection = TextChatService.MessageReceived:Connect(function(msg)
     if unloaded then return end
 
+    -- Detect whisper: arrives on an RBXWhisper TextChannel.
+    local isWhisper = false
+    pcall(function()
+        isWhisper = msg.TextChannel ~= nil
+            and msg.TextChannel.Name:find("RBXWhisper") ~= nil
+    end)
+
     local src = msg.TextSource
     if src then
         local player      = Players:GetPlayerByUserId(src.UserId)
@@ -3953,7 +4503,7 @@ local chatMessageConnection = TextChatService.MessageReceived:Connect(function(m
         local username    = (player and player.Name) or src.Name
         local userId      = src.UserId
         local isLocal     = (userId == LocalPlayer.UserId)
-        addChatMessage(displayName, username, userId, msg.Text or "", isLocal)
+        addChatMessage(displayName, username, userId, msg.Text or "", isLocal, isWhisper)
     else
         local text = msg.Text or ""
         if text ~= "" then
@@ -4010,7 +4560,7 @@ local function cancelChatTween()
     end
 end
 
-local function setChatExpanded(expand)
+setChatExpanded = function(expand)
     cancelChatTween()
     chatPanel.Visible = true
 
@@ -4047,9 +4597,6 @@ end)
 
 -- Roblox-style "/" shortcut for the custom chat.
 -- The opening slash is explicitly suppressed from the TextBox.
-local CHAT_SLASH_ACTION = "PingFpsUI_CustomChatSlash"
-local suppressOpeningSlash = false
-
 -- Roblox can insert the key into a TextBox after the input callback returns,
 -- so watch the Text property and remove only the slash used to open chat.
 table.insert(chatInputConnections, chatInputBox:GetPropertyChangedSignal("Text"):Connect(function()
@@ -4058,6 +4605,15 @@ table.insert(chatInputConnections, chatInputBox:GetPropertyChangedSignal("Text")
         suppressOpeningSlash = false
     end
 end))
+
+whisperAutocompleteConnection = chatInputBox:GetPropertyChangedSignal("Text"):Connect(function()
+    if suppressOpeningSlash then return end
+    updateWhisperAutocomplete()
+end)
+
+chatInputBox.Focused:Connect(function()
+    task.defer(updateWhisperAutocomplete)
+end)
 
 ContextActionService:BindActionAtPriority(
     CHAT_SLASH_ACTION,
@@ -4125,6 +4681,13 @@ chatCleanupHook = function()
         pcall(function() connection:Disconnect() end)
     end
     table.clear(chatInputConnections)
+
+    if whisperAutocompleteConnection then
+        pcall(function()
+            whisperAutocompleteConnection:Disconnect()
+        end)
+        whisperAutocompleteConnection = nil
+    end
 
     pcall(function()
         ContextActionService:UnbindAction(CHAT_SLASH_ACTION)
