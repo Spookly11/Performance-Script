@@ -2610,7 +2610,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.39"
+versionLabel.Text = "Version 3.39.1"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -4074,6 +4074,39 @@ local _setChatExpanded
 -- Whisper target autocomplete state.
 local whisperAutocompleteConnection = nil
 
+-- Cache of whether each player can receive whispers from the local player.
+-- Populated asynchronously when players join so findWhisperPlayer never yields.
+-- nil  = not yet checked (excluded from autocomplete until confirmed)
+-- true = can whisper
+-- false = cannot whisper (age gate, privacy settings, or chat disabled)
+local whisperableCache = {}
+
+local function checkWhisperable(player)
+    if player == LocalPlayer then return end
+    task.spawn(function()
+        local ok, result = pcall(function()
+            return TextChatService:CanUserChatAsync(player.UserId)
+        end)
+        whisperableCache[player.UserId] = ok and result == true
+    end)
+end
+
+-- Pre-check everyone already in the server when the chat panel loads.
+for _, player in ipairs(Players:GetPlayers()) do
+    checkWhisperable(player)
+end
+
+-- Check new arrivals and clear stale cache entries using dedicated connections
+-- stored separately from playerCountConnections (which is defined later).
+whisperCacheConnections = {
+    Players.PlayerAdded:Connect(function(player)
+        checkWhisperable(player)
+    end),
+    Players.PlayerRemoving:Connect(function(player)
+        whisperableCache[player.UserId] = nil
+    end),
+}
+
 local function findWhisperPlayer(prefix)
     prefix = (prefix or ""):gsub("^@", ""):lower()
     if prefix == "" then return nil end
@@ -4084,19 +4117,26 @@ local function findWhisperPlayer(prefix)
 
     for _, player in ipairs(Players:GetPlayers()) do
         if player ~= LocalPlayer then
-            local username = player.Name:lower()
-            local displayName = player.DisplayName:lower()
+            -- Skip players who are confirmed unable to receive whispers,
+            -- or whose chat status has not been checked yet.
+            if whisperableCache[player.UserId] ~= true then
+                -- If nil (not yet checked), skip silently for now.
+                -- If false (confirmed cannot chat), skip permanently.
+            else
+                local username = player.Name:lower()
+                local displayName = player.DisplayName:lower()
 
-            if username == prefix then
-                exactUsername = player
-                break
-            elseif displayName == prefix then
-                exactDisplayName = player
-            end
+                if username == prefix then
+                    exactUsername = player
+                    break
+                elseif displayName == prefix then
+                    exactDisplayName = player
+                end
 
-            if username:sub(1, #prefix) == prefix
-                or displayName:sub(1, #prefix) == prefix then
-                table.insert(matches, player)
+                if username:sub(1, #prefix) == prefix
+                    or displayName:sub(1, #prefix) == prefix then
+                    table.insert(matches, player)
+                end
             end
         end
     end
@@ -5284,6 +5324,12 @@ function cleanupScript()
         pcall(function() conn:Disconnect() end)
     end
     table.clear(playerCountConnections)
+    if whisperCacheConnections then
+        for _, conn in ipairs(whisperCacheConnections) do
+            pcall(function() conn:Disconnect() end)
+        end
+        table.clear(whisperCacheConnections)
+    end
 
     for _, conn in ipairs(emoteConnections) do
         pcall(function() conn:Disconnect() end)
