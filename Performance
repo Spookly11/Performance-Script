@@ -2610,7 +2610,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.39.1"
+versionLabel.Text = "Version 3.39.2"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -5285,6 +5285,218 @@ table.insert(dragConnections, UserInputService.InputChanged:Connect(function(inp
         end
     end
 end))
+
+-- ─── CUSTOM HEALTH BAR ───────────────────────────────────────────────────────
+local healthBarGui         = nil
+local healthBarConn        = nil
+local healthBarCharConn    = nil
+local healthBarHealthConn  = nil
+
+local HEALTH_BAR_X         = 799   -- px from left edge of screen
+local HEALTH_BAR_Y         = 860   -- px from top edge of screen
+local HEALTH_BAR_FIXED_W   = 330  -- length in pixels
+local HEALTH_BAR_FIXED_H   = 26   -- thickness in pixels
+
+local function healthColor(pct)
+    -- green at 1.0 → yellow at 0.5 → red at 0.0
+    if pct >= 0.5 then
+        local t = (pct - 0.5) / 0.5
+        return Color3.fromRGB(
+            math.floor((1 - t) * 255),
+            math.floor(200 + t * 55),
+            0
+        )
+    else
+        local t = pct / 0.5
+        return Color3.fromRGB(
+            220,
+            math.floor(t * 185),
+            0
+        )
+    end
+end
+
+local function destroyHealthBarGui()
+    if healthBarConn then
+        pcall(function() healthBarConn:Disconnect() end)
+        healthBarConn = nil
+    end
+    if healthBarHealthConn then
+        pcall(function() healthBarHealthConn:Disconnect() end)
+        healthBarHealthConn = nil
+    end
+    if healthBarGui and healthBarGui.Parent then
+        pcall(function() healthBarGui:Destroy() end)
+    end
+    healthBarGui = nil
+end
+
+local function buildHealthBarGui()
+    destroyHealthBarGui()
+    if unloaded then return end
+
+    healthBarGui = Instance.new("ScreenGui")
+    healthBarGui.Name            = "PingFpsUI_HealthBar"
+    healthBarGui.ResetOnSpawn    = false
+    healthBarGui.IgnoreGuiInset  = true
+    healthBarGui.DisplayOrder    = 5
+    healthBarGui.Parent          = PlayerGui
+
+    -- Container (positioned each frame)
+    local container = Instance.new("Frame")
+    container.Name                  = "HBContainer"
+    container.BackgroundTransparency = 1
+    container.Size                  = UDim2.new(0, HEALTH_BAR_FIXED_W, 0, HEALTH_BAR_FIXED_H)
+    container.Position              = UDim2.new(0.5, -100, 0.5, 0)
+    container.Parent                = healthBarGui
+
+    -- Outer shell (border)
+    local shell = Instance.new("Frame")
+    shell.Name                  = "Shell"
+    shell.Size                  = UDim2.new(1, 0, 1, 0)
+    shell.Position              = UDim2.new(0, 0, 0, 0)
+    shell.BackgroundColor3      = Color3.fromRGB(15, 15, 15)
+    shell.BackgroundTransparency = 0.15
+    shell.BorderSizePixel       = 0
+    shell.Parent                = container
+    local shellCorner = Instance.new("UICorner")
+    shellCorner.CornerRadius = UDim.new(0, 4)
+    shellCorner.Parent = shell
+
+    -- Track (dark inset)
+    local track = Instance.new("Frame")
+    track.Name                  = "Track"
+    track.Size                  = UDim2.new(1, -4, 1, -4)
+    track.Position              = UDim2.new(0, 2, 0, 2)
+    track.BackgroundColor3      = Color3.fromRGB(20, 20, 20)
+    track.BackgroundTransparency = 0.1
+    track.BorderSizePixel       = 0
+    track.Parent                = shell
+    local trackCorner = Instance.new("UICorner")
+    trackCorner.CornerRadius = UDim.new(0, 3)
+    trackCorner.Parent = track
+
+    -- Fill bar
+    local fill = Instance.new("Frame")
+    fill.Name                  = "Fill"
+    fill.Size                  = UDim2.new(1, 0, 1, 0)
+    fill.Position              = UDim2.new(0, 0, 0, 0)
+    fill.BackgroundColor3      = Color3.fromRGB(80, 220, 80)
+    fill.BorderSizePixel       = 0
+    fill.Parent                = track
+    local fillCorner = Instance.new("UICorner")
+    fillCorner.CornerRadius = UDim.new(0, 3)
+    fillCorner.Parent = fill
+
+    -- Shine overlay
+    local shine = Instance.new("Frame")
+    shine.Name                  = "Shine"
+    shine.Size                  = UDim2.new(1, 0, 0.45, 0)
+    shine.Position              = UDim2.new(0, 0, 0, 0)
+    shine.BackgroundColor3      = Color3.fromRGB(255, 255, 255)
+    shine.BackgroundTransparency = 0.82
+    shine.BorderSizePixel       = 0
+    shine.ZIndex                = 3
+    shine.Parent                = fill
+    local shineCorner = Instance.new("UICorner")
+    shineCorner.CornerRadius = UDim.new(0, 3)
+    shineCorner.Parent = shine
+
+    -- Percentage label
+    local label = Instance.new("TextLabel")
+    label.Name                  = "PctLabel"
+    label.Size                  = UDim2.new(1, 0, 1, 0)
+    label.Position              = UDim2.new(0, 0, 0, 0)
+    label.BackgroundTransparency = 1
+    label.TextColor3            = Color3.fromRGB(255, 255, 255)
+    label.TextStrokeColor3      = Color3.fromRGB(0, 0, 0)
+    label.TextStrokeTransparency = 0.35
+    label.Font                  = Enum.Font.GothamBold
+    label.TextSize              = 9
+    label.Text                  = "100.00%"
+    label.ZIndex                = 4
+    label.Parent                = container
+
+    local function updateFill(humanoid)
+        if not humanoid or not humanoid.Parent then return end
+        local hp    = humanoid.Health
+        local maxHp = humanoid.MaxHealth
+        local pct   = (maxHp > 0) and math.clamp(hp / maxHp, 0, 1) or 0
+        fill.Size             = UDim2.new(pct, 0, 1, 0)
+        fill.BackgroundColor3 = healthColor(pct)
+        label.Text            = string.format("%.2f%%", pct * 100)
+    end
+
+    local lastW, lastH = HEALTH_BAR_FIXED_W, HEALTH_BAR_FIXED_H
+
+    -- Cache the humanoid so we don't call FindFirstChildOfClass every frame
+    local cachedHumanoid = nil
+    local function getHumanoid()
+        if cachedHumanoid and cachedHumanoid.Parent then
+            return cachedHumanoid
+        end
+        local char = LocalPlayer.Character
+        if char then
+            cachedHumanoid = char:FindFirstChildOfClass("Humanoid")
+        else
+            cachedHumanoid = nil
+        end
+        return cachedHumanoid
+    end
+    -- Invalidate humanoid cache on respawn
+    LocalPlayer.CharacterAdded:Connect(function()
+        cachedHumanoid = nil
+    end)
+
+    healthBarConn = RunService.Heartbeat:Connect(function(dt)
+        if unloaded or not healthBarGui or not healthBarGui.Parent then return end
+
+        local char = LocalPlayer.Character
+        if not char then
+            container.Visible = false
+            return
+        end
+
+        -- Fixed position on screen, independent of any other UI element
+        local barW = HEALTH_BAR_FIXED_W
+        local barH = HEALTH_BAR_FIXED_H
+
+        if barW ~= lastW or barH ~= lastH then
+            container.Size = UDim2.new(0, barW, 0, barH)
+            lastW, lastH = barW, barH
+        end
+        container.Position = UDim2.new(0, HEALTH_BAR_X, 0, HEALTH_BAR_Y)
+        container.Visible  = true
+
+        local humanoid = getHumanoid()
+        if humanoid then
+            updateFill(humanoid)
+        else
+            fill.Size  = UDim2.new(1, 0, 1, 0)
+            label.Text = "100.00%"
+        end
+    end)
+end
+
+-- Build on load and re-build on character respawn
+buildHealthBarGui()
+
+-- Hide the native Roblox health bar
+local StarterGui = game:GetService("StarterGui")
+pcall(function()
+    StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
+end)
+
+healthBarCharConn = LocalPlayer.CharacterAdded:Connect(function()
+    task.wait(0.5)
+    buildHealthBarGui()
+    -- Re-hide after respawn (Roblox re-enables it on spawn)
+    pcall(function()
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, false)
+    end)
+end)
+
+-- ─── END CUSTOM HEALTH BAR ───────────────────────────────────────────────────
 function cleanupScript()
     if unloaded then
         return
@@ -5308,6 +5520,17 @@ function cleanupScript()
 
     pcall(function()
         stopCustomColorUIWatcher()
+    end)
+
+    if healthBarCharConn then
+        pcall(function() healthBarCharConn:Disconnect() end)
+        healthBarCharConn = nil
+    end
+    destroyHealthBarGui()
+    -- Restore native health bar
+    pcall(function()
+        local StarterGui = game:GetService("StarterGui")
+        StarterGui:SetCoreGuiEnabled(Enum.CoreGuiType.Health, true)
     end)
 
     if renderConn then
