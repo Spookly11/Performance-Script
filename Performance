@@ -5292,10 +5292,11 @@ local healthBarConn        = nil
 local healthBarCharConn    = nil
 local healthBarHealthConn  = nil
 
-local HEALTH_BAR_X         = 799   -- px from left edge of screen
-local HEALTH_BAR_Y         = 840   -- px from top edge of screen
-local HEALTH_BAR_FIXED_W   = 330  -- length in pixels
-local HEALTH_BAR_FIXED_H   = 26   -- thickness in pixels
+-- Position as a fraction of the screen (0.0–1.0) so it stays put in any resolution/fullscreen
+local HEALTH_BAR_SCALE_X   = 0.502  -- horizontal center as fraction of screen width
+local HEALTH_BAR_SCALE_Y   = 0.847  -- vertical position as fraction of screen height
+local HEALTH_BAR_FIXED_W   = 330    -- length in pixels (constant)
+local HEALTH_BAR_FIXED_H   = 26     -- thickness in pixels (constant)
 
 local function healthColor(pct)
     -- green at 1.0 → yellow at 0.5 → red at 0.0
@@ -5465,7 +5466,8 @@ local function buildHealthBarGui()
             container.Size = UDim2.new(0, barW, 0, barH)
             lastW, lastH = barW, barH
         end
-        container.Position = UDim2.new(0, HEALTH_BAR_X, 0, HEALTH_BAR_Y)
+        -- Use scale so the bar follows the same screen-relative position in any resolution
+        container.Position = UDim2.new(HEALTH_BAR_SCALE_X, -HEALTH_BAR_FIXED_W / 2, HEALTH_BAR_SCALE_Y, -HEALTH_BAR_FIXED_H / 2)
         container.Visible  = true
 
         local humanoid = getHumanoid()
