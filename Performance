@@ -2610,7 +2610,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.39.3"
+versionLabel.Text = "Version 3.39.5"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
@@ -4078,43 +4078,46 @@ local _setChatExpanded
 -- Whisper target autocomplete state.
 local whisperAutocompleteConnection = nil
 
--- whisperableCache[userId]:
---   false = positively confirmed this player can't be whispered
---   true/nil = allowed (nil means "unknown", which must NOT block autocomplete)
--- The old code required `true`, and CanUserChatAsync() is not meant for checking
--- other players (it errors -> pcall false -> everyone was excluded -> autofill
--- never found anyone). This version only excludes on a confirmed "no".
-local whisperableCache = {}
-
-local function checkWhisperable(player)
-    if player == LocalPlayer then return end
-    task.spawn(function()
-        local ok, result = pcall(function()
-            return TextChatService:CanUsersDirectChatAsync(LocalPlayer.UserId, { player.UserId })
-        end)
-        if ok and type(result) == "table" then
-            local can = false
-            for _, id in ipairs(result) do
-                if id == player.UserId then can = true break end
-            end
-            whisperableCache[player.UserId] = can
-        end
-        -- on error: leave nil (treated as allowed)
-    end)
+-- Autofill only offers players who can be whispered as far as the client can
+-- tell. Roblox's own chat-permission checks (age group / privacy) are
+-- server-only, so the one client-visible signal used here is a chat source that
+-- explicitly says CanSend = false. Not finding a source never hides a player.
+local function getChatSource(player)
+    local channels = TextChatService:FindFirstChild("TextChannels")
+    local general = channels and (channels:FindFirstChild("RBXGeneral") or channels:FindFirstChild("General"))
+    return general and general:FindFirstChild(player.Name) or nil
 end
 
-for _, player in ipairs(Players:GetPlayers()) do
-    checkWhisperable(player)
+local function chatSourceBlocksSending(player)
+    local source = getChatSource(player)
+    if not source then return false end
+    local ok, canSend = pcall(function() return source.CanSend end)
+    return ok and canSend == false
 end
 
-whisperCacheConnections = {
-    Players.PlayerAdded:Connect(function(player)
-        checkWhisperable(player)
-    end),
-    Players.PlayerRemoving:Connect(function(player)
-        whisperableCache[player.UserId] = nil
-    end),
-}
+-- Single gate used by autofill.
+local function isWhisperable(player)
+    if player == LocalPlayer then return false end
+    if chatSourceBlocksSending(player) then return false end
+    return true
+end
+
+-- One line per player for the /wcheck command.
+local function describeWhisperStatus(player)
+    local source = getChatSource(player)
+    local sourceText = "no chat source found"
+    if source then
+        local ok, canSend = pcall(function() return source.CanSend end)
+        sourceText = "canSend=" .. (ok and tostring(canSend) or "?")
+    end
+
+    return string.format(
+        "%s: %s -> %s",
+        player.Name,
+        sourceText,
+        isWhisperable(player) and "autofill" or "skipped"
+    )
+end
 
 -- Returns the single player whose username OR display name starts with `prefix`.
 -- Returns nil if there are zero or several matches (so we never autofill the
@@ -4125,7 +4128,7 @@ local function findWhisperPlayer(prefix)
 
     local matches = {}
     for _, player in ipairs(Players:GetPlayers()) do
-        if player ~= LocalPlayer and whisperableCache[player.UserId] ~= false then
+        if isWhisperable(player) then
             local username = player.Name:lower()
             local displayName = player.DisplayName:lower()
             if username:sub(1, #prefix) == prefix or displayName:sub(1, #prefix) == prefix then
@@ -4281,6 +4284,17 @@ end
 local function sendChatMessage(text)
     text = text:match("^%s*(.-)%s*$")
     if text == "" then return end
+
+    -- Diagnostics: shows what the whisper filter knows about each player.
+    if text:lower() == "/wcheck" then
+        addChatMessage(nil, nil, nil, "[Whisper filter status]", false)
+        for _, p in ipairs(Players:GetPlayers()) do
+            if p ~= LocalPlayer then
+                addChatMessage(nil, nil, nil, describeWhisperStatus(p), false)
+            end
+        end
+        return
+    end
 
     local lower = text:lower()
     local whisperPrefix
@@ -5291,12 +5305,6 @@ function cleanupScript()
         pcall(function() conn:Disconnect() end)
     end
     table.clear(playerCountConnections)
-    if whisperCacheConnections then
-        for _, conn in ipairs(whisperCacheConnections) do
-            pcall(function() conn:Disconnect() end)
-        end
-        table.clear(whisperCacheConnections)
-    end
 
     for _, conn in ipairs(emoteConnections) do
         pcall(function() conn:Disconnect() end)
