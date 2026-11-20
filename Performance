@@ -5,6 +5,16 @@ end
 
 sessionStartTime = os.clock()
 
+-- ── Auto-copy JobId on join ────────────────────────────────────────────────
+-- Copies the current server's JobId to the clipboard as soon as the script
+-- loads (i.e. whenever you join or rejoin). Uses setclipboard if available;
+-- silently skips if the executor doesn't expose it.
+pcall(function()
+    local jobId = tostring(game.JobId or "")
+    if jobId ~= "" and type(setclipboard) == "function" then
+        setclipboard(jobId)
+    end
+end)
 
 enabled = {
     ping = true,
@@ -2610,7 +2620,7 @@ versionLabel.BackgroundTransparency = 1
 versionLabel.Position = UDim2.new(1, -100, 1, -28)
 versionLabel.Size = UDim2.new(0, 80, 0, 16)
 versionLabel.Font = Enum.Font.Gotham
-versionLabel.Text = "Version 3.39.5"
+versionLabel.Text = "Version 3.39.6"
 versionLabel.TextColor3 = COLORS.disabledGray
 versionLabel.TextSize = 13
 versionLabel.TextXAlignment = Enum.TextXAlignment.Right
